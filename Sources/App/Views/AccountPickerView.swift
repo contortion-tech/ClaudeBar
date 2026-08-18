@@ -49,7 +49,7 @@ struct AccountPill: View {
                         .frame(width: 16, height: 16)
 
                     Text(account.initialLetter)
-                        .font(.system(size: 8, weight: .bold, design: theme.fontDesign))
+                        .font(theme.font(.microLabel))
                         .foregroundStyle(isActive ? .white : theme.textSecondary)
                 }
 

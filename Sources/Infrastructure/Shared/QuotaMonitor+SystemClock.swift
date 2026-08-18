@@ -4,13 +4,15 @@ public extension QuotaMonitor {
     convenience init(
         providers: any AIProviderRepository,
         alerter: (any QuotaAlerter)? = nil,
-        powerStateProvider: (any PowerStateProvider)? = SystemPowerStateProvider()
+        powerStateProvider: (any PowerStateProvider)? = SystemPowerStateProvider(),
+        resetRepository: (any ResetRepository)? = JSONResetRepository.shared
     ) {
         self.init(
             providers: providers,
             alerter: alerter,
             clock: SystemClock(),
-            powerStateProvider: powerStateProvider
+            powerStateProvider: powerStateProvider,
+            resetRepository: resetRepository
         )
     }
 }

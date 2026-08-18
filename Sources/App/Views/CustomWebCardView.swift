@@ -19,7 +19,7 @@ struct CustomWebCardView: View {
                     .foregroundStyle(theme.accentPrimary)
 
                 Text(url.host ?? url.absoluteString)
-                    .font(.system(size: 9, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(theme.textSecondary)
                     .textCase(.uppercase)
                     .lineLimit(1)

@@ -15,6 +15,7 @@ struct MenuContentView: View {
 
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.motionPolicy) private var motion
     #if ENABLE_SPARKLE
     @Environment(\.sparkleUpdater) private var sparkleUpdater
     #endif
@@ -45,8 +46,8 @@ struct MenuContentView: View {
             theme.backgroundGradient
                 .ignoresSafeArea()
 
-            // Background orbs (if theme supports them)
-            if theme.showBackgroundOrbs {
+            // Background orbs (decorative only — skipped under Reduce Motion)
+            if theme.showBackgroundOrbs, motion.allowsDecorativeMotion {
                 if theme.id == "christmas" {
                     ChristmasBackgroundOrbs()
                 } else {
@@ -256,7 +257,7 @@ struct MenuContentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text("ClaudeBar")
-                        .font(.system(size: 18, weight: .bold, design: theme.fontDesign))
+                        .font(theme.font(.headline))
                         .foregroundStyle(theme.textPrimary)
 
                     // Christmas gift icon
@@ -268,7 +269,7 @@ struct MenuContentView: View {
                 }
 
                 Text(headerSubtitle)
-                    .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.body))
                     .foregroundStyle(theme.id == "cli" ? theme.accentPrimary : theme.textSecondary)
             }
 
@@ -314,7 +315,7 @@ struct MenuContentView: View {
             )
 
             Text(statusText)
-                .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                .font(theme.font(.body))
                 .foregroundStyle(theme.textPrimary)
         }
         .padding(.horizontal, 12)
@@ -475,7 +476,7 @@ struct MenuContentView: View {
             ProviderIconView(providerId: provider.id, size: 20, showGlow: false)
 
             Text(provider.name)
-                .font(.system(size: 13, weight: .semibold, design: theme.fontDesign))
+                .font(theme.font(.controlLabel))
                 .foregroundStyle(theme.textPrimary)
 
             Spacer()
@@ -494,7 +495,7 @@ struct MenuContentView: View {
                 .foregroundStyle(theme.statusWarning)
 
             Text(provider.lastError?.localizedDescription ?? "Unavailable")
-                .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                .font(theme.font(.body))
                 .foregroundStyle(theme.textTertiary)
                 .lineLimit(1)
 
@@ -513,21 +514,21 @@ struct MenuContentView: View {
                     .frame(width: 32, height: 32)
 
                 Text(String(displayName.prefix(1)).uppercased())
-                    .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.title))
                     .foregroundStyle(.white)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(displayName)
-                        .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.body))
                         .foregroundStyle(theme.textPrimary)
                         .lineLimit(1)
 
                     // Account tier badge
                     if let accountTier = snapshot.accountTier {
                         Text(accountTier.badgeText)
-                            .font(.system(size: 8, weight: .semibold, design: theme.fontDesign))
+                            .font(theme.font(.microLabel))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
@@ -539,7 +540,7 @@ struct MenuContentView: View {
                 }
 
                 Text("Updated \(snapshot.ageDescription)")
-                    .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(theme.textTertiary)
             }
 
@@ -594,7 +595,7 @@ struct MenuContentView: View {
                     }
 
                     Text((group.title ?? "Other").uppercased())
-                        .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                        .font(theme.font(.microLabel))
                         .foregroundStyle(theme.textSecondary)
                         .tracking(0.5)
 
@@ -602,17 +603,17 @@ struct MenuContentView: View {
 
                     if case .headerInline(let note) = group.notePlacement {
                         Text(note)
-                            .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                            .font(theme.font(.caption))
                             .foregroundStyle(theme.textTertiary)
                     } else if isNoteOnly {
                         Text("No usage data")
-                            .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                            .font(theme.font(.caption))
                             .foregroundStyle(theme.textTertiary)
                     } else {
                         // Collapsed sections keep their headline number visible.
                         if isCollapsed, let lowest = group.lowestQuota {
                             Text("\(Int(lowest.percentRemaining))% left")
-                                .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                                .font(theme.font(.microLabel))
                                 .foregroundStyle(theme.textTertiary)
                         }
 
@@ -631,7 +632,7 @@ struct MenuContentView: View {
                 // its own row - never silently dropped.
                 if case .row(let note) = group.notePlacement {
                     Text(note)
-                        .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.caption))
                         .foregroundStyle(theme.textTertiary)
                 }
 
@@ -640,11 +641,11 @@ struct MenuContentView: View {
                 }
 
                 TwoColumnCardGrid(
-                    items: Array(group.quotas.enumerated()),
-                    id: \.element.quotaType
+                    items: Array(group.quotas.displayBuckets.enumerated()),
+                    id: \.element.id
                 ) { entry in
                     WrappedStatCard(
-                        quota: entry.element,
+                        bucket: entry.element,
                         delay: baseDelay + Double(entry.offset) * 0.08,
                         showsReset: sharedReset == nil
                     )
@@ -659,7 +660,7 @@ struct MenuContentView: View {
                 .font(.system(size: 8))
 
             Text(text)
-                .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                .font(theme.font(.caption))
 
             Spacer(minLength: 0)
         }
@@ -686,11 +687,11 @@ struct MenuContentView: View {
             if !snapshot.hasQuotaGroups, !snapshot.quotas.isEmpty {
                 let sharedReset = snapshot.quotas.sharedResetDescription()
                 TwoColumnCardGrid(
-                    items: Array(snapshot.quotas.enumerated()),
-                    id: \.element.quotaType
+                    items: Array(snapshot.displayBuckets.enumerated()),
+                    id: \.element.id
                 ) { entry in
                     WrappedStatCard(
-                        quota: entry.element,
+                        bucket: entry.element,
                         delay: Double(entry.offset) * 0.08,
                         showsReset: sharedReset == nil
                     )
@@ -762,12 +763,12 @@ struct MenuContentView: View {
             }
 
             Text("\(selectedProvider?.name ?? selectedProviderId) Unavailable")
-                .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
+                .font(theme.font(.title))
                 .foregroundStyle(theme.textPrimary)
 
             // Show actual error message if available, otherwise generic message
             Text(selectedProvider?.lastError?.localizedDescription ?? "Install CLI or check configuration")
-                .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                .font(theme.font(.bodyEmphasis))
                 .foregroundStyle(theme.textTertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 16)
@@ -838,6 +839,7 @@ struct MenuContentView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Share Claude Code")
+                .accessibilityLabel("Share Claude Code")
                 .keyboardShortcut("s")
             }
 
@@ -866,6 +868,7 @@ struct MenuContentView: View {
             }
             .buttonStyle(.plain)
             .help(updateAvailableHelpText)
+            .accessibilityLabel("Settings")
             .keyboardShortcut(",")
 
             // Quit Button
@@ -884,6 +887,7 @@ struct MenuContentView: View {
             }
             .buttonStyle(.plain)
             .help("Quit ClaudeBar")
+            .accessibilityLabel("Quit ClaudeBar")
             .keyboardShortcut("q")
         }
         .opacity(animateIn ? 1 : 0)
@@ -967,7 +971,7 @@ struct ProviderPill: View {
                     .font(.system(size: 10, weight: .semibold))
 
                 Text(providerName)
-                    .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.body))
                     .lineLimit(1)
                     .fixedSize()
             }
@@ -1087,14 +1091,115 @@ struct TwoColumnCardGrid<Item, ID: Hashable, Cell: View>: View {
 // MARK: - Wrapped Stat Card
 
 struct WrappedStatCard: View {
-    let quota: UsageQuota
+    let bucket: QuotaBucket
     let delay: Double
     var showsReset: Bool = true
 
     @Environment(\.appTheme) private var theme
+    @Environment(\.motionPolicy) private var motion
     @State private var isHovering = false
     @State private var animateProgress = false
     @State private var settings = AppSettings.shared
+    @State private var storedReset: StoredReset?
+    @State private var isEditingReset = false
+    @State private var draftReset = Date()
+
+    /// Every member of a bucket carries the same value and reset, so the
+    /// representative speaks for all of them on the card face.
+    private var quota: UsageQuota { bucket.representative }
+
+    /// What the card calls this limit.
+    ///
+    /// Named after the window when one is known, because a bucket spanning
+    /// Claude Sonnet, Claude Opus and GPT-OSS has no shared model name to
+    /// borrow. Falls back to the membership count, and only then to the
+    /// single quota's own label.
+    private var cardTitle: String {
+        if let window = bucket.windowTitle { return window.uppercased() }
+        if bucket.memberCount > 1 { return "\(bucket.memberCount) MODELS" }
+        return (quota.compactTitle ?? quota.quotaType.displayName).uppercased()
+    }
+
+    /// Shown opposite the title when the title is a window, so the card still
+    /// says how many models sit behind it.
+    private var memberCaption: String? {
+        guard bucket.memberCount > 1, bucket.windowTitle != nil else { return nil }
+        return "\(bucket.memberCount) models"
+    }
+
+    /// What VoiceOver reads for this card. The face conveys status through a
+    /// tinted number, a coloured bar and a tick mark, none of which is spoken.
+    private var spokenDescription: String {
+        let value: String
+        if let dollarUsed = quota.formattedDollarUsed {
+            value = dollarUsed
+        } else if let dollarText = quota.formattedDollarRemaining {
+            value = dollarText
+        } else {
+            value = "\(Int(quota.displayPercent(mode: effectiveDisplayMode)))%"
+        }
+
+        return QuotaAccessibility.description(
+            title: cardTitle,
+            value: value,
+            valueCaption: valueCaption,
+            statusText: effectiveDisplayMode == .pace
+                ? quota.pace.displayName
+                : quota.status.badgeText,
+            resetText: showsReset ? resolvedReset?.description() : nil,
+            memberCount: bucket.memberCount
+        )
+    }
+
+    /// The full membership, revealed on hover rather than on the card face.
+    private var membershipHelp: String {
+        guard bucket.memberCount > 1 else { return "" }
+        return bucket.members
+            .map { $0.compactTitle ?? $0.quotaType.displayName }
+            .joined(separator: "\n")
+    }
+
+    /// The reset to show, drawn from the provider, the user's entry, or what
+    /// the app remembered — see `UsageQuota.resolvedReset`.
+    private var resolvedReset: ResolvedReset? {
+        quota.resolvedReset(stored: storedReset)
+    }
+
+    /// Loaded once per appearance rather than read during `body`, which runs
+    /// for every card on every render.
+    private func loadStoredReset() {
+        storedReset = JSONResetRepository.shared.storedReset(
+            providerId: quota.providerId,
+            quotaKey: quota.quotaType.quotaKey
+        )
+    }
+
+    /// Writes a manual reset for every member of the bucket.
+    ///
+    /// Buckets are a display-time construct, so the edit fans out to each
+    /// member's own record. If the bucket later splits, every member keeps the
+    /// reset the user set rather than losing it with the group.
+    private func applyManualReset(_ date: Date) {
+        let record = StoredReset(date: date, source: .manual, recordedAt: Date())
+        for member in bucket.members {
+            JSONResetRepository.shared.record(
+                record,
+                providerId: member.providerId,
+                quotaKey: member.quotaType.quotaKey
+            )
+        }
+        loadStoredReset()
+    }
+
+    private func clearManualReset() {
+        for member in bucket.members {
+            JSONResetRepository.shared.clear(
+                providerId: member.providerId,
+                quotaKey: member.quotaType.quotaKey
+            )
+        }
+        loadStoredReset()
+    }
 
     private var displayMode: UsageDisplayMode {
         settings.usageDisplayMode
@@ -1128,45 +1233,47 @@ struct WrappedStatCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
             // Header row with icon, type, and badge
             HStack(alignment: .top, spacing: 0) {
                 // Left side: icon and type label
-                HStack(spacing: 5) {
+                HStack(spacing: Spacing.sm) {
                     Image(systemName: iconName)
-                        .font(.system(size: 9, weight: .bold))
+                        .font(theme.font(.microLabel))
                         .foregroundStyle(statusColor)
 
-                    Text((quota.compactTitle ?? quota.quotaType.displayName).uppercased())
-                        .font(.system(size: 8, weight: .medium, design: theme.fontDesign))
+                    Text(cardTitle)
+                        .typeScale(.microLabel, theme: theme)
                         .foregroundStyle(theme.textSecondary)
-                        .tracking(0.3)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
 
                 Spacer(minLength: 4)
 
-                // Status badge - pace mode shows pace badge, others show status
-                if effectiveDisplayMode == .pace {
-                    Text(quota.pace.displayName.uppercased())
-                        .badge(paceColor)
-                } else {
-                    Text(quota.status.badgeText)
-                        .badge(statusColor)
+                // Pace and status already reach the eye through the value's
+                // tint and the tick on the progress bar; a third copy as a
+                // badge cost ~93pt of a 155pt card and truncated the title.
+                if let memberCaption {
+                    Text(memberCaption)
+                        .typeScale(.microLabel, theme: theme)
+                        .foregroundStyle(theme.textTertiary)
+                        .fixedSize()
                 }
             }
 
             // Large value display with label (end-aligned)
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
                 if let dollarUsed = quota.formattedDollarUsed,
                    let dollarCap = quota.formattedDollarCap {
-                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: Spacing.xxs) {
                         Text(dollarUsed)
-                            .font(.system(size: 20, weight: .heavy, design: theme.fontDesign))
+                            .font(theme.font(.statValue))
                             .foregroundStyle(theme.textPrimary)
                             .contentTransition(.numericText())
 
                         Text("of \(dollarCap)")
-                            .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                            .font(theme.font(.caption))
                             .foregroundStyle(theme.textSecondary)
                     }
                     .lineLimit(1)
@@ -1174,28 +1281,28 @@ struct WrappedStatCard: View {
                     .layoutPriority(1)
                 } else if let dollarText = quota.formattedDollarRemaining {
                     Text(dollarText)
-                        .font(.system(size: 18, weight: .bold, design: theme.fontDesign))
+                        .font(theme.font(.statValue))
                         .foregroundStyle(theme.textPrimary)
                         .contentTransition(.numericText())
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 1) {
                         Text("\(Int(quota.displayPercent(mode: effectiveDisplayMode)))")
-                            .font(.system(size: 26, weight: .bold, design: theme.fontDesign))
+                            .font(theme.font(.statValue))
                             .foregroundStyle(effectiveDisplayMode == .pace ? paceColor : theme.textPrimary)
                             .contentTransition(.numericText())
 
                         Text("%")
-                            .font(.system(size: 13, weight: .medium, design: theme.fontDesign))
+                            .font(theme.font(.body))
                             .foregroundStyle(effectiveDisplayMode == .pace ? paceColor.opacity(0.7) : theme.textTertiary)
                     }
                 }
 
-                Spacer(minLength: 4)
-
                 Text(valueCaption)
-                    .font(.system(size: isCappedSpend ? 10 : 12, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.caption))
                     .fixedSize()
                     .foregroundStyle(effectiveDisplayMode == .pace ? paceColor.opacity(0.8) : theme.textTertiary)
+
+                Spacer(minLength: 0)
             }
 
             // Progress bar with gradient and pace tick
@@ -1211,10 +1318,16 @@ struct WrappedStatCard: View {
                         RoundedRectangle(cornerRadius: 3)
                             .fill(theme.progressGradient(for: quota.percentRemaining))
                             .frame(width: animateProgress ? geo.size.width * max(0, min(100, progressPercent)) / 100 : 0)
-                            .animation(.spring(response: 0.8, dampingFraction: 0.7).delay(delay + 0.2), value: animateProgress)
+                            .animation(
+                                motion.animation(
+                                    .spring(response: 0.8, dampingFraction: 0.7)
+                                        .delay(motion.delay(delay + 0.2))
+                                ),
+                                value: animateProgress
+                            )
                     }
                 }
-                .frame(height: 5)
+                .frame(height: 6)
 
                 // Expected pace tick mark
                 if let expectedPercent = quota.expectedProgressPercent(mode: effectiveDisplayMode) {
@@ -1228,7 +1341,10 @@ struct WrappedStatCard: View {
                         }
                         .fill(theme.textTertiary)
                         .opacity(animateProgress ? 1 : 0)
-                        .animation(.easeIn(duration: 0.3).delay(delay + 0.5), value: animateProgress)
+                        .animation(
+                            motion.animation(.easeIn(duration: 0.3).delay(motion.delay(delay + 0.5))),
+                            value: animateProgress
+                        )
                     }
                     .frame(height: 5)
                 }
@@ -1236,19 +1352,20 @@ struct WrappedStatCard: View {
             .help(quota.paceTickHelp(mode: effectiveDisplayMode) ?? "")
 
             // Reset info (hidden when the grid hoisted a shared countdown)
-            if showsReset, let resetText = quota.resetTimestampDescription ?? quota.resetText ?? quota.resetDescription {
-                HStack(spacing: 3) {
+            if showsReset,
+               let resetText = resolvedReset?.description() ?? quota.resetText {
+                HStack(spacing: Spacing.xs) {
                     Image(systemName: "clock.fill")
-                        .font(.system(size: 7))
+                        .font(theme.font(.caption))
 
                     Text(resetText)
-                        .font(.system(size: 8, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.caption))
                 }
                 .foregroundStyle(theme.textTertiary)
                 .lineLimit(1)
             }
         }
-        .padding(12)
+        .padding(Spacing.lg)
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: theme.cardCornerRadius)
@@ -1259,11 +1376,70 @@ struct WrappedStatCard: View {
             }
         )
         .scaleEffect(isHovering ? 1.015 : 1.0)
-        .animation(.easeOut(duration: 0.15), value: isHovering)
+        .animation(motion.animation(.easeOut(duration: 0.15)), value: isHovering)
         .onHover { isHovering = $0 }
+        .help(membershipHelp)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spokenDescription)
+        .contextMenu {
+            Button(storedReset?.source == .manual ? "Change reset time…" : "Set reset time…") {
+                draftReset = resolvedReset?.date ?? Date().addingTimeInterval(3600)
+                isEditingReset = true
+            }
+
+            if storedReset?.source == .manual {
+                Button("Clear reset time", role: .destructive) {
+                    clearManualReset()
+                }
+            }
+        }
+        .popover(isPresented: $isEditingReset, arrowEdge: .bottom) {
+            resetEditor
+        }
         .onAppear {
             animateProgress = true
+            loadStoredReset()
         }
+    }
+
+    /// Manual reset entry, for providers that report usage but never say when
+    /// it resets. Fill-only: a value the provider reports still wins, so this
+    /// fills silence rather than overriding live data.
+    private var resetEditor: some View {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            Text(cardTitle)
+                .font(theme.font(.bodyEmphasis))
+
+            DatePicker(
+                "Resets at",
+                selection: $draftReset,
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .datePickerStyle(.compact)
+
+            if bucket.memberCount > 1 {
+                Text("Applies to all \(bucket.memberCount) models in this limit.")
+                    .font(theme.font(.caption))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Used only while the provider reports no reset of its own.")
+                .font(theme.font(.caption))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button("Cancel") { isEditingReset = false }
+                Button("Save") {
+                    applyManualReset(draftReset)
+                    isEditingReset = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(Spacing.xl)
+        .frame(width: 280)
     }
 
     private var iconName: String {
@@ -1309,7 +1485,7 @@ struct LoadingSpinnerView: View {
             }
 
             Text("Fetching usage data...")
-                .font(.system(size: 13, weight: .medium, design: theme.fontDesign))
+                .font(theme.font(.body))
                 .foregroundStyle(theme.textSecondary)
         }
         .frame(height: 140)
@@ -1347,7 +1523,7 @@ struct WrappedActionButton: View {
                 }
 
                 Text(label)
-                    .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.body))
                     .fixedSize()
             }
             .foregroundStyle(isHovering ? .white : theme.textPrimary)
@@ -1602,7 +1778,7 @@ struct BedrockUsageCard: View {
                             .foregroundStyle(ProviderVisualIdentityLookup.color(for: "bedrock", scheme: colorScheme))
 
                         Text("TODAY'S USAGE")
-                            .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                            .font(theme.font(.microLabel))
                             .foregroundStyle(theme.textSecondary)
                             .tracking(0.5)
                     }
@@ -1632,14 +1808,14 @@ struct BedrockUsageCard: View {
                     ForEach(usage.modelsBySpend.prefix(3), id: \.model.id) { modelUsage in
                         HStack {
                             Text(modelUsage.model.displayName)
-                                .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                                .font(theme.font(.body))
                                 .foregroundStyle(theme.textSecondary)
                                 .lineLimit(1)
 
                             Spacer()
 
                             Text(modelUsage.formattedCost)
-                                .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                                .font(theme.font(.bodyEmphasis))
                                 .foregroundStyle(theme.textPrimary)
                         }
                     }
@@ -1647,7 +1823,7 @@ struct BedrockUsageCard: View {
                     // Show "and X more" if more than 3 models
                     if usage.modelUsages.count > 3 {
                         Text("and \(usage.modelUsages.count - 3) more...")
-                            .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                            .font(theme.font(.caption))
                             .foregroundStyle(theme.textTertiary)
                     }
                 }
@@ -1662,13 +1838,13 @@ struct BedrockUsageCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Daily Budget")
-                            .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                            .font(theme.font(.caption))
                             .foregroundStyle(theme.textSecondary)
 
                         Spacer()
 
                         Text("\(Int(min(budgetPercent, 100)))% of \(budgetFormatted)")
-                            .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
+                            .font(theme.font(.microLabel))
                             .foregroundStyle(budgetPercent > 90 ? theme.statusCritical : theme.textPrimary)
                     }
 
@@ -1692,7 +1868,7 @@ struct BedrockUsageCard: View {
                     .font(.system(size: 8))
 
                 Text("Since \(formattedPeriodStart)")
-                    .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.caption))
             }
             .foregroundStyle(theme.textTertiary)
         }
@@ -1743,11 +1919,11 @@ private struct StatPill: View {
                 .foregroundStyle(theme.textTertiary)
 
             Text(value)
-                .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                .font(theme.font(.bodyEmphasis))
                 .foregroundStyle(theme.textPrimary)
 
             Text(label)
-                .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                .font(theme.font(.caption))
                 .foregroundStyle(theme.textTertiary)
         }
         .padding(.horizontal, 8)

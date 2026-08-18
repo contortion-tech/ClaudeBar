@@ -23,7 +23,7 @@ struct ExtensionMetricCardView: View {
                     }
 
                     Text(metric.label.uppercased())
-                        .font(.system(size: 8, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.caption))
                         .foregroundStyle(theme.textSecondary)
                         .tracking(0.3)
                 }
@@ -34,7 +34,7 @@ struct ExtensionMetricCardView: View {
             // Large value display
             HStack(alignment: .firstTextBaseline) {
                 Text(metric.value)
-                    .font(.system(size: 24, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.statValue))
                     .foregroundStyle(theme.textPrimary)
                     .contentTransition(.numericText())
                     .lineLimit(1)
@@ -43,7 +43,7 @@ struct ExtensionMetricCardView: View {
                 Spacer()
 
                 Text(metric.unit)
-                    .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.body))
                     .foregroundStyle(theme.textTertiary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -76,7 +76,7 @@ struct ExtensionMetricCardView: View {
                         .font(.system(size: 7))
 
                     Text(deltaText(delta))
-                        .font(.system(size: 8, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.caption))
                 }
                 .foregroundStyle(theme.textTertiary)
                 .lineLimit(1)

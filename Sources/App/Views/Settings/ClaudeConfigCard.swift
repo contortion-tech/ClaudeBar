@@ -90,11 +90,11 @@ struct ClaudeConfigCard: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Claude Configuration")
-                    .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.title))
                     .foregroundStyle(theme.textPrimary)
 
                 Text("Data fetching method")
-                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.caption))
                     .foregroundStyle(theme.textTertiary)
             }
 
@@ -106,7 +106,7 @@ struct ClaudeConfigCard: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("PROBE MODE")
-                    .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(theme.textSecondary)
                     .tracking(0.5)
 
@@ -144,11 +144,11 @@ struct ClaudeConfigCard: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("CLI Mode")
-                            .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
+                            .font(theme.font(.microLabel))
                             .foregroundStyle(claudeProbeMode == .cli ? theme.textPrimary : theme.textSecondary)
 
                         Text("Runs `claude /usage` command. Works with any auth method.")
-                            .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                            .font(theme.font(.caption))
                             .foregroundStyle(theme.textTertiary)
                     }
                 }
@@ -161,11 +161,11 @@ struct ClaudeConfigCard: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("API Mode")
-                            .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
+                            .font(theme.font(.microLabel))
                             .foregroundStyle(claudeProbeMode == .api ? theme.textPrimary : theme.textSecondary)
 
                         Text("Calls Anthropic API directly. Faster, uses OAuth credentials.")
-                            .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                            .font(theme.font(.caption))
                             .foregroundStyle(theme.textTertiary)
                     }
                 }
@@ -182,7 +182,7 @@ struct ClaudeConfigCard: View {
                         .frame(width: 16)
 
                     Text("Usage data is cached for 15 min to stay under Anthropic's API rate limits, so background refresh is capped at 15 min in this mode.")
-                        .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.caption))
                         .foregroundStyle(theme.textTertiary)
                 }
 
@@ -192,23 +192,23 @@ struct ClaudeConfigCard: View {
                         .foregroundStyle(hasCredentials ? theme.statusHealthy : theme.statusWarning)
 
                     Text(hasCredentials ? "OAuth credentials found" : "No OAuth credentials found")
-                        .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                        .font(theme.font(.microLabel))
                         .foregroundStyle(hasCredentials ? theme.statusHealthy : theme.statusWarning)
                 }
 
                 if !hasCredentials {
                     Text("Run `claude` in terminal to authenticate, then credentials will be available.")
-                        .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.caption))
                         .foregroundStyle(theme.textTertiary)
                 }
 
                 Toggle(isOn: $claudeCliFallbackEnabled) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("CLI fallback")
-                            .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
+                            .font(theme.font(.microLabel))
                             .foregroundStyle(theme.textPrimary)
                         Text("Fall back to `claude /usage` if OAuth API is unavailable.")
-                            .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                            .font(theme.font(.caption))
                             .foregroundStyle(theme.textTertiary)
                     }
                 }
@@ -284,11 +284,11 @@ struct ClaudeConfigCard: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Claude API Budget")
-                    .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.title))
                     .foregroundStyle(theme.textPrimary)
 
                 Text("Cost threshold warnings")
-                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.caption))
                     .foregroundStyle(theme.textTertiary)
             }
 
@@ -306,17 +306,17 @@ struct ClaudeConfigCard: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("MONTHLY BUDGET (USD)")
-                    .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(theme.textSecondary)
                     .tracking(0.5)
 
                 HStack(spacing: 6) {
                     Text("$")
-                        .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.body))
                         .foregroundStyle(theme.textSecondary)
 
                     TextField("", text: $budgetInput, prompt: Text("10.00").foregroundStyle(theme.textTertiary))
-                        .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.body))
                         .foregroundStyle(theme.textPrimary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
@@ -338,11 +338,11 @@ struct ClaudeConfigCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Get warnings when approaching your budget threshold.")
-                    .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(theme.textTertiary)
 
                 Text("Only applies to Claude API accounts, not Claude Max.")
-                    .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(theme.textTertiary)
             }
         }

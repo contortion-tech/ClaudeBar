@@ -73,7 +73,7 @@ import Domain
         resetText: "Resets 11am"
     )
 
-    WrappedStatCard(quota: healthyQuota, delay: 0)
+    WrappedStatCard(bucket: QuotaBucket(members: [healthyQuota]), delay: 0)
         .frame(width: 160)
         .padding(20)
         .background(DarkTheme().backgroundGradient)
@@ -87,7 +87,7 @@ import Domain
         resetText: "Resets Dec 25"
     )
 
-    WrappedStatCard(quota: warningQuota, delay: 0)
+    WrappedStatCard(bucket: QuotaBucket(members: [warningQuota]), delay: 0)
         .frame(width: 160)
         .padding(20)
         .background(DarkTheme().backgroundGradient)
@@ -101,7 +101,7 @@ import Domain
         resetText: "Resets in 2h"
     )
 
-    WrappedStatCard(quota: criticalQuota, delay: 0)
+    WrappedStatCard(bucket: QuotaBucket(members: [criticalQuota]), delay: 0)
         .frame(width: 160)
         .padding(20)
         .background(DarkTheme().backgroundGradient)
@@ -117,7 +117,7 @@ import Domain
 
     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
         ForEach(Array(quotas.enumerated()), id: \.offset) { index, quota in
-            WrappedStatCard(quota: quota, delay: Double(index) * 0.1)
+            WrappedStatCard(bucket: QuotaBucket(members: [quota]), delay: Double(index) * 0.1)
         }
     }
     .padding(20)
@@ -134,7 +134,7 @@ import Domain
 
     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
         ForEach(Array(quotas.enumerated()), id: \.offset) { index, quota in
-            WrappedStatCard(quota: quota, delay: Double(index) * 0.1)
+            WrappedStatCard(bucket: QuotaBucket(members: [quota]), delay: Double(index) * 0.1)
         }
     }
     .padding(20)
@@ -349,11 +349,11 @@ import Domain
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("ClaudeBar")
-                    .font(.system(size: 18, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.headline))
                     .foregroundStyle(.white)
 
                 Text("AI Usage Monitor")
-                    .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.bodyEmphasis))
                     .foregroundStyle(.white.opacity(0.7))
             }
 
@@ -365,7 +365,7 @@ import Domain
                     .fill(theme.statusHealthy)
                     .frame(width: 8, height: 8)
                 Text("HEALTHY")
-                    .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.bodyEmphasis))
                     .foregroundStyle(.white)
             }
             .padding(.horizontal, 12)

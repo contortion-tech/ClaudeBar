@@ -35,6 +35,10 @@ public final class QuotaMonitor {
     /// tests; the app injects a real provider via the convenience init.
     private let powerStateProvider: (any PowerStateProvider)?
 
+    /// Optional store for reset times. `nil` disables remembering entirely,
+    /// which is the default for tests; the app injects a file-backed one.
+    private let resetRepository: (any ResetRepository)?
+
     /// Previous status for change detection
     private var previousStatuses: [String: QuotaStatus] = [:]
 
@@ -55,8 +59,10 @@ public final class QuotaMonitor {
         providers: any AIProviderRepository,
         alerter: (any QuotaAlerter)? = nil,
         clock: any Clock,
-        powerStateProvider: (any PowerStateProvider)? = nil
+        powerStateProvider: (any PowerStateProvider)? = nil,
+        resetRepository: (any ResetRepository)? = nil
     ) {
+        self.resetRepository = resetRepository
         self.providers = providers
         self.alerter = alerter
         self.clock = clock
@@ -97,6 +103,8 @@ public final class QuotaMonitor {
 
     /// Handles snapshot update and alerts user if status changed
     private func handleSnapshotUpdate(provider: any AIProvider, snapshot: UsageSnapshot) async {
+        rememberReportedResets(provider: provider, snapshot: snapshot)
+
         let previousStatus = previousStatuses[provider.id] ?? .healthy
         let newStatus = snapshot.overallStatus
 
@@ -108,6 +116,25 @@ public final class QuotaMonitor {
                 providerId: provider.id,
                 previousStatus: previousStatus,
                 currentStatus: newStatus
+            )
+        }
+    }
+
+    /// Remembers every reset a provider actually reported, so a later refresh
+    /// that omits them can still show a countdown.
+    ///
+    /// Only overwrites a manual entry when the provider genuinely reports a
+    /// value — a silent refresh leaves the user's entry standing, which is what
+    /// makes manual entry fill-only rather than a fight with the probe.
+    private func rememberReportedResets(provider: any AIProvider, snapshot: UsageSnapshot) {
+        guard let resetRepository else { return }
+        let now = Date()
+        for quota in snapshot.quotas {
+            guard let reportedReset = quota.resetsAt else { continue }
+            resetRepository.record(
+                StoredReset(date: reportedReset, source: .probe, recordedAt: now),
+                providerId: provider.id,
+                quotaKey: quota.quotaType.quotaKey
             )
         }
     }

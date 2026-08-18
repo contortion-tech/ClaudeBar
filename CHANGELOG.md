@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Manual reset entry, on a quota card's right-click menu, for providers that
+  report usage but never say when it resets. It fills silence only — a reset the
+  provider actually reports still wins — so there is no conflict to resolve.
+  Entries roll forward by the quota's window rather than firing once.
+- Remembered resets roll forward when their moment passes, marked with a "~" so
+  an inferred countdown reads differently from a reported one. Values remembered
+  from a provider stop after three windows rather than showing a confident
+  countdown the app has no basis for; a manual entry keeps going, since it
+  exists precisely for providers that never report.
+- Reduce Motion support. The popover replayed its entrance on every open — a
+  staggered card reveal, a spring per progress bar, a pulsing sync ring,
+  drifting background orbs. With the system setting on, cards appear together
+  and decorative motion is skipped.
+- VoiceOver descriptions for quota cards, and labels for the icon-only Share,
+  Settings and Quit buttons, which previously announced only as "button". A card
+  reads as its limit, value, status and reset; an inferred countdown is spoken
+  as "estimated" rather than having its "~" read as punctuation. This matters
+  more now the pace badge is gone: status reaches the eye through colour and a
+  tick mark, neither of which is spoken.
+- A shared typographic and spacing scale (`TypeScale`, `Spacing`) so views name
+  a role instead of a point size. Steps resolve through the theme's existing
+  `font(size:weight:)`, which means a theme's `customFontName` now reaches every
+  label that adopts a token — previously only three call sites in the whole app
+  routed through it. 292 of the app's 429 improvised font sizes now go through
+  the scale; the rest sit in contexts with no theme in scope.
+- An `AppTests` unit-test target, giving the App (presentation) layer test
+  coverage for the first time. `ThemesSpec` had noted the gap.
+
+### Changed
+- Providers that report a quota per model now show one card per actual limit.
+  Several models usually share a single bucket — spending one spends them all —
+  so the card face showed the same value and countdown a dozen times. On a live
+  Antigravity snapshot this collapses twelve cards to two. Which models sit
+  behind a card is on its hover tooltip.
+- Cards are named after their window ("5H", "7D") rather than a member model,
+  because a bucket can span Claude Sonnet, Claude Opus and GPT-OSS with no
+  shared name to borrow. Buckets with no known window are named by their
+  membership count instead of guessing.
+- The pace/status badge is gone from quota cards. Pace already reached the eye
+  through the value's tint and the tick on the progress bar; as a badge it also
+  cost ~93pt of a 155pt card, which is what truncated card titles to "GEMINI…".
+- Reset times survive refreshes and restarts. A provider that reports a reset
+  only sometimes no longer blanks the countdown in between.
+- Quota cards read as a single left-aligned column: the "Used"/"Remaining"
+  caption now follows the value inline instead of competing with the status
+  badge for the card's right edge.
+- Card text no longer drops below 10pt. The reset countdown (was 8pt) and its
+  clock icon (was 7pt) are now legible, and status badges moved from 8pt to
+  10pt. Long quota labels shrink to fit rather than truncate.
+- Progress bars are 6pt tall (was 5pt), which reads as a bar rather than a
+  hairline at the card's 179pt width.
+
+### Removed
+- `ProviderSectionView` and `QuotaCardView`, an unused second implementation of
+  the quota card that rendered an un-themed look contradicting the live one.
+- The duplicate static colour palette in `Theme.swift`, which shadowed the
+  adaptive functions that every caller now uses.
+
 ---
 
 ## [0.4.79] - 2026-08-13

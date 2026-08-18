@@ -81,11 +81,11 @@ struct DeepSeekConfigCard: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("DeepSeek Configuration")
-                    .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.title))
                     .foregroundStyle(theme.textPrimary)
 
                 Text("Balance tracking")
-                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.caption))
                     .foregroundStyle(theme.textTertiary)
             }
 
@@ -99,7 +99,7 @@ struct DeepSeekConfigCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text("API KEY")
-                        .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                        .font(theme.font(.microLabel))
                         .foregroundStyle(theme.textSecondary)
                         .tracking(0.5)
 
@@ -110,7 +110,7 @@ struct DeepSeekConfigCard: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 9))
                             Text("Configured")
-                                .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                                .font(theme.font(.microLabel))
                         }
                         .foregroundStyle(theme.statusHealthy)
                     }
@@ -124,7 +124,7 @@ struct DeepSeekConfigCard: View {
                             SecureField("", text: $deepSeekApiKeyInput, prompt: Text("sk-...").foregroundStyle(theme.textTertiary))
                         }
                     }
-                    .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.body))
                     .foregroundStyle(theme.textPrimary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
@@ -156,12 +156,12 @@ struct DeepSeekConfigCard: View {
             // Environment Variable
             VStack(alignment: .leading, spacing: 6) {
                 Text("API KEY ENV VAR (ALTERNATIVE)")
-                    .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(theme.textSecondary)
                     .tracking(0.5)
 
                 TextField("", text: $deepSeekAuthEnvVarInput, prompt: Text("DEEPSEEK_API_KEY").foregroundStyle(theme.textTertiary))
-                    .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.body))
                     .foregroundStyle(theme.textPrimary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
@@ -181,15 +181,15 @@ struct DeepSeekConfigCard: View {
             // Token lookup order
             VStack(alignment: .leading, spacing: 4) {
                 Text("API KEY LOOKUP ORDER")
-                    .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(theme.textSecondary)
                     .tracking(0.5)
 
                 Text("1. First checks environment variable (default: DEEPSEEK_API_KEY)")
-                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.caption))
                     .foregroundStyle(theme.textTertiary)
                 Text("2. Falls back to API key entered above")
-                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.caption))
                     .foregroundStyle(theme.textTertiary)
             }
 
@@ -199,7 +199,7 @@ struct DeepSeekConfigCard: View {
                     ProgressView()
                         .scaleEffect(0.7)
                     Text("Testing connection...")
-                        .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.body))
                         .foregroundStyle(theme.textSecondary)
                 }
             } else {
@@ -209,7 +209,7 @@ struct DeepSeekConfigCard: View {
                     }
                 } label: {
                     Text("Save & Test Connection")
-                        .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.body))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -223,20 +223,20 @@ struct DeepSeekConfigCard: View {
 
             if let result = deepSeekTestResult {
                 Text(result)
-                    .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(result.contains("Success") ? theme.statusHealthy : theme.statusCritical)
             }
 
             // Help link
             VStack(alignment: .leading, spacing: 4) {
                 Text("Get your API key from the DeepSeek platform")
-                    .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(theme.textTertiary)
 
                 Link(destination: URL(string: "https://platform.deepseek.com/api_keys")!) {
                     HStack(spacing: 3) {
                         Text("Open DeepSeek API Keys")
-                            .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                            .font(theme.font(.microLabel))
                         Image(systemName: "arrow.up.right")
                             .font(.system(size: 7, weight: .bold))
                     }
@@ -256,7 +256,7 @@ struct DeepSeekConfigCard: View {
                         Image(systemName: "trash.fill")
                             .font(.system(size: 9))
                         Text("Remove API Key")
-                            .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                            .font(theme.font(.microLabel))
                     }
                     .foregroundStyle(theme.statusCritical)
                 }

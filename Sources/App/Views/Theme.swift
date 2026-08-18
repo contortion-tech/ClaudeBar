@@ -127,16 +127,6 @@ enum AppTheme {
 
 
 
-    // MARK: - Legacy Static Colors (for backward compatibility)
-
-    static let purpleDeep = Color(red: 0.38, green: 0.22, blue: 0.72)
-    static let purpleVibrant = Color(red: 0.55, green: 0.32, blue: 0.85)
-    static let pinkHot = Color(red: 0.85, green: 0.35, blue: 0.65)
-    static let magentaSoft = Color(red: 0.78, green: 0.42, blue: 0.75)
-    static let violetElectric = Color(red: 0.62, green: 0.28, blue: 0.98)
-    static let coralAccent = Color(red: 0.98, green: 0.55, blue: 0.45)
-    static let goldenGlow = Color(red: 0.98, green: 0.78, blue: 0.35)
-    static let tealBright = Color(red: 0.35, green: 0.85, blue: 0.78)
 
     // MARK: - Status Colors (Adaptive)
 
@@ -164,11 +154,6 @@ enum AppTheme {
             : Color(red: 0.75, green: 0.18, blue: 0.28)
     }
 
-    // Legacy static status colors
-    static let statusHealthy = Color(red: 0.35, green: 0.92, blue: 0.68)
-    static let statusWarning = Color(red: 0.98, green: 0.72, blue: 0.35)
-    static let statusCritical = Color(red: 0.98, green: 0.42, blue: 0.52)
-    static let statusDepleted = Color(red: 0.85, green: 0.25, blue: 0.35)
 
     // MARK: - Text Colors
 
@@ -292,42 +277,6 @@ enum AppTheme {
         return LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing)
     }
 
-    // Legacy static gradients
-    static let backgroundGradient = LinearGradient(
-        colors: [purpleDeep, purpleVibrant, pinkHot.opacity(0.8)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-
-    static let cardGradient = LinearGradient(
-        colors: [Color.white.opacity(0.18), Color.white.opacity(0.08)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-
-    static let accentGradient = LinearGradient(
-        colors: [coralAccent, pinkHot],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-
-    static let pillGradient = LinearGradient(
-        colors: [magentaSoft.opacity(0.6), pinkHot.opacity(0.4)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-
-    static func progressGradient(for percent: Double) -> LinearGradient {
-        let colors: [Color] = switch percent {
-        case 0..<20:
-            [statusCritical, statusDepleted]
-        case 20..<50:
-            [statusWarning, coralAccent]
-        default:
-            [tealBright, statusHealthy]
-        }
-        return LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing)
-    }
 
     // MARK: - Glass Effect Colors (Adaptive)
 
@@ -355,10 +304,6 @@ enum AppTheme {
             : purpleDeep(for: scheme).opacity(0.12)
     }
 
-    // Legacy static glass colors
-    static let glassBackground = Color.white.opacity(0.12)
-    static let glassBorder = Color.white.opacity(0.25)
-    static let glassHighlight = Color.white.opacity(0.35)
 
     // MARK: - Interactive State Colors
 
@@ -538,14 +483,15 @@ extension View {
 
 struct BadgeStyle: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.appTheme) private var theme
     let color: Color
 
     func body(content: Content) -> some View {
         content
-            .font(AppTheme.captionFont(size: 8))
-            .foregroundStyle(colorScheme == .dark ? .white : .white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .font(theme.font(.microLabel))
+            .foregroundStyle(.white)
+            .padding(.horizontal, Spacing.sm)
+            .padding(.vertical, Spacing.xxs)
             .background(
                 RoundedRectangle(cornerRadius: 4)
                     .fill(color.opacity(colorScheme == .dark ? 0.9 : 0.85))
@@ -825,13 +771,13 @@ extension QuotaStatus {
     var themeColor: Color {
         switch self {
         case .healthy:
-            AppTheme.statusHealthy
+            BaseTheme.defaultStatusHealthy
         case .warning:
-            AppTheme.statusWarning
+            BaseTheme.defaultStatusWarning
         case .critical:
-            AppTheme.statusCritical
+            BaseTheme.defaultStatusCritical
         case .depleted:
-            AppTheme.statusDepleted
+            BaseTheme.defaultStatusDepleted
         }
     }
 
@@ -862,7 +808,7 @@ extension UsagePace {
         switch self {
         case .onPace: .green
         case .ahead: .orange
-        case .behind: AppTheme.tealBright
+        case .behind: BaseTheme.tealBright
         case .unknown: .secondary
         }
     }

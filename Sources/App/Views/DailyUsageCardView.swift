@@ -22,7 +22,7 @@ struct DailyUsageCardView: View {
                         .foregroundStyle(metric.color)
 
                     Text(metric.label.uppercased())
-                        .font(.system(size: 8, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.caption))
                         .foregroundStyle(theme.textSecondary)
                         .tracking(0.3)
                 }
@@ -33,21 +33,21 @@ struct DailyUsageCardView: View {
             // Large value display
             HStack(alignment: .firstTextBaseline) {
                 Text(primaryValue)
-                    .font(.system(size: 24, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.statValue))
                     .foregroundStyle(theme.textPrimary)
                     .contentTransition(.numericText())
 
                 Spacer()
 
                 Text(metric.unitLabel)
-                    .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.body))
                     .foregroundStyle(theme.textTertiary)
             }
 
             // Optional subtitle (e.g., cache breakdown for tokens card)
             if let subtitle = subtitleText {
                 Text(subtitle)
-                    .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.caption))
                     .foregroundStyle(theme.textTertiary)
                     .lineLimit(1)
             }
@@ -77,7 +77,7 @@ struct DailyUsageCardView: View {
                         .font(.system(size: 7))
 
                     Text(deltaText)
-                        .font(.system(size: 8, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.caption))
                 }
                 .foregroundStyle(deltaColor)
                 .lineLimit(1)

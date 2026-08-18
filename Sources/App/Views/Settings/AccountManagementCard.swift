@@ -63,11 +63,11 @@ struct AccountManagementCard: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Accounts")
-                    .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.title))
                     .foregroundStyle(theme.textPrimary)
 
                 Text("\(provider.accounts.count) account\(provider.accounts.count == 1 ? "" : "s") configured")
-                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.caption))
                     .foregroundStyle(theme.textTertiary)
             }
 
@@ -95,7 +95,7 @@ struct AccountManagementCard: View {
                     .frame(width: 24, height: 24)
 
                 Text(account.initialLetter)
-                    .font(.system(size: 10, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(
                         account.accountId == provider.activeAccount.accountId
                             ? .white
@@ -106,13 +106,13 @@ struct AccountManagementCard: View {
             // Account info
             VStack(alignment: .leading, spacing: 2) {
                 Text(account.displayName)
-                    .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.body))
                     .foregroundStyle(theme.textPrimary)
                     .lineLimit(1)
 
                 if let email = account.email {
                     Text(email)
-                        .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.caption))
                         .foregroundStyle(theme.textTertiary)
                         .lineLimit(1)
                 }
@@ -139,7 +139,7 @@ struct AccountManagementCard: View {
                     provider.switchAccount(to: account.accountId)
                 } label: {
                     Text("Switch")
-                        .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                        .font(theme.font(.caption))
                         .foregroundStyle(theme.accentPrimary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
@@ -165,7 +165,7 @@ struct AccountManagementCard: View {
                     .font(.system(size: 12, weight: .semibold))
 
                 Text("Add Account")
-                    .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.body))
             }
             .foregroundStyle(theme.accentPrimary)
             .frame(maxWidth: .infinity)

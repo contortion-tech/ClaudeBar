@@ -70,11 +70,11 @@ struct ExtensionConfigCard: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(manifest.name) Configuration")
-                    .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
+                    .font(theme.font(.title))
                     .foregroundStyle(theme.textPrimary)
 
                 Text(manifest.description ?? "Extension settings")
-                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .font(theme.font(.caption))
                     .foregroundStyle(theme.textTertiary)
             }
 
@@ -88,7 +88,7 @@ struct ExtensionConfigCard: View {
     private func fieldView(for field: ConfigField) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(field.label.uppercased())
-                .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                .font(theme.font(.microLabel))
                 .foregroundStyle(theme.textSecondary)
                 .tracking(0.5)
 
@@ -105,7 +105,7 @@ struct ExtensionConfigCard: View {
 
             if let helpText = field.helpText {
                 Text(helpText)
-                    .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                    .font(theme.font(.microLabel))
                     .foregroundStyle(theme.textTertiary)
             }
         }
@@ -117,7 +117,7 @@ struct ExtensionConfigCard: View {
             text: binding(for: field),
             prompt: Text(field.placeholder ?? "").foregroundStyle(theme.textTertiary)
         )
-        .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+        .font(theme.font(.body))
         .foregroundStyle(theme.textPrimary)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -141,7 +141,7 @@ struct ExtensionConfigCard: View {
                     )
                 }
             }
-            .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+            .font(theme.font(.body))
             .foregroundStyle(theme.textPrimary)
 
             Button {

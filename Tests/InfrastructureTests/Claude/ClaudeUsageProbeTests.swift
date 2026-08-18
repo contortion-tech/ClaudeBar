@@ -359,3 +359,47 @@ struct ClaudeUsageProbeTests {
         #expect(exclusions == ["CLAUDE_CODE_OAUTH_TOKEN"])
     }
 }
+
+// MARK: - API Usage Billing accounts
+
+@Suite("Feature: API-billing accounts")
+struct ClaudeAPIBillingDetectionTests {
+
+    /// CLI 2.1.140 renders this for an API-billing account: the Usage Stats
+    /// panel, with cost totals and no session quota anywhere.
+    static let apiBillingUsageOutput = """
+    Opus 4.7 (1M context) · API Usage Billing · someone@example.com's Organization
+    ~/Library/Application Support/ClaudeBar/Probe
+
+    /usage
+    Settings   Status   Config   Usage Stats
+    Session
+    Total cost:            $0.0000
+    Total duration (API):  0s
+    Total duration (wall): 0s
+    Total code changes:    0 lines added, 0 lines removed
+    Usage:                 0 input, 0 output, 0 cache read, 0 cache write
+    """
+
+    @Test
+    func `an API-billing account routes to the cost fallback rather than failing`() {
+        // When — the probe classifies the output before parsing
+        let error = ClaudeUsageProbe().extractUsageError(Self.apiBillingUsageOutput)
+
+        // Then — this account has no session quota to find; reporting a parse
+        // failure would present it as a broken probe
+        #expect(error == .subscriptionRequired)
+    }
+
+    @Test
+    func `a subscription account is untouched by the new detection`() {
+        // Given — a normal /usage panel
+        let subscription = """
+        Opus 4.5 · Claude Max
+        Current session      45% used
+        Current week (all models)   12% used
+        """
+
+        #expect(ClaudeUsageProbe().extractUsageError(subscription) == nil)
+    }
+}

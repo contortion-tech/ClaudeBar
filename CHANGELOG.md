@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the only exit was the Settings toggle.
 
 ### Fixed
+- Claude reported "Failed to parse output: Could not find session usage" on
+  API Usage Billing accounts. Those accounts have no session quota, so the CLI
+  renders a cost panel with nothing to find. The probe already had a /cost
+  fallback, but detected the case from a message CLI 2.1.140 no longer emits;
+  it now recognises the account type the panel actually reports.
 - Model names keep their casing. `QuotaType.displayName` capitalised every
   label, turning Antigravity's "GPT-OSS 120B (Medium)" into "Gpt-Oss 120B
   (Medium)" wherever a label is shown unmodified, such as the bucket tooltip.

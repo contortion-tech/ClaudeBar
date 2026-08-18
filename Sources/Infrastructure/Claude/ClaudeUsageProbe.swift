@@ -876,6 +876,18 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
             return .subscriptionRequired
         }
 
+        // CLI 2.1.140 stopped emitting that message. An API-billing account
+        // now renders the Usage Stats panel — cost totals, no session quota —
+        // and names itself in the header instead. Without this the parse falls
+        // through to "Could not find session usage", which reads as a broken
+        // probe rather than an account that has no session quota to report.
+        // Guarded on the absence of a session line so a subscription account
+        // that merely mentions the phrase still parses normally.
+        if lower.contains("api usage billing"), !lower.contains("current session") {
+            AppLog.probes.info("Claude account is API Usage Billing: no session quota, falling back to /cost")
+            return .subscriptionRequired
+        }
+
         // Check for rate limit errors, but exclude promotional messages like "rate limits are 2x higher"
         let isRateLimitError = (lower.contains("rate limited") || 
                                 lower.contains("rate limit exceeded") ||

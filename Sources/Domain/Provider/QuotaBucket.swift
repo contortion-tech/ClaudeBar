@@ -105,3 +105,33 @@ extension Array where Element == UsageQuota {
         return buckets.map(QuotaBucket.init(members:))
     }
 }
+
+// MARK: - Overview Capping
+
+public extension Array where Element == QuotaBucket {
+
+    /// The buckets worth showing when space is tight, and how many were held back.
+    ///
+    /// Overview mode shows every provider at once, so a provider with nine
+    /// buckets crowds out the rest. Ranking by lowest remaining means the cap
+    /// only ever hides quotas that are fine: a bucket at 11% is what you would
+    /// act on, and one at 100% is not, regardless of which came first.
+    ///
+    /// Ordering is by need, not by position, so a bucket that drops below
+    /// another will swap places between refreshes. That instability is the
+    /// price of never hiding the one that matters.
+    func capped(to limit: Int) -> (shown: [QuotaBucket], hidden: Int) {
+        guard limit > 0 else { return ([], count) }
+        guard count > limit else { return (self, 0) }
+
+        let ranked = enumerated().sorted { lhs, rhs in
+            let left = lhs.element.representative.percentRemaining
+            let right = rhs.element.representative.percentRemaining
+            // Ties keep their original order so equal buckets don't shuffle.
+            if left == right { return lhs.offset < rhs.offset }
+            return left < right
+        }
+
+        return (Array(ranked.prefix(limit).map(\.element)), count - limit)
+    }
+}

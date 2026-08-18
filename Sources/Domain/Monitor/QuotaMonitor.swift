@@ -88,10 +88,20 @@ public final class QuotaMonitor {
     /// Refreshes a single provider.
     /// `kind` defaults to `.interactive`; the background monitoring loop passes
     /// `.background` so providers can skip non-glanceable work (issue #204).
-    private func refreshProvider(_ provider: any AIProvider, kind: RefreshKind = .interactive) async {
+    private func refreshProvider(
+        _ provider: any AIProvider,
+        kind: RefreshKind = .interactive,
+        trigger: RefreshTrigger = .userInitiated
+    ) async {
         guard await provider.isAvailable() else {
             return
         }
+
+        // Observable state — prevents duplicate concurrent refreshes. Was
+        // guarded in the view before refreshes were routed through here.
+        guard !provider.isSyncing else { return }
+
+        guard shouldRefresh(provider, trigger: trigger) else { return }
 
         do {
             let snapshot = try await provider.refresh(kind)
@@ -99,6 +109,20 @@ public final class QuotaMonitor {
         } catch {
             // Provider stores error in lastError - no need for external observer
         }
+    }
+
+    /// Whether this provider is worth fetching right now — see `RefreshPolicy`.
+    ///
+    /// A quota sitting at 100% with hours left cannot return an interesting
+    /// answer, so the popover no longer pays for a request every time it opens.
+    /// Explicit refreshes and providers in an error state always go through.
+    private func shouldRefresh(_ provider: any AIProvider, trigger: RefreshTrigger) -> Bool {
+        RefreshPolicy.shouldRefresh(
+            lastFetchedAt: provider.snapshot?.capturedAt,
+            quotas: provider.snapshot?.quotas ?? [],
+            hasError: provider.lastError != nil,
+            trigger: trigger
+        )
     }
 
     /// Handles snapshot update and alerts user if status changed
@@ -140,15 +164,23 @@ public final class QuotaMonitor {
     }
 
     /// Refreshes a single provider by its ID.
-    public func refresh(providerId: String, kind: RefreshKind = .interactive) async {
+    public func refresh(
+        providerId: String,
+        kind: RefreshKind = .interactive,
+        trigger: RefreshTrigger = .userInitiated
+    ) async {
         guard let provider = providers.provider(id: providerId) else {
             return
         }
-        await refreshProvider(provider, kind: kind)
+        await refreshProvider(provider, kind: kind, trigger: trigger)
     }
 
     /// Refreshes the given providers once, preserving order and removing duplicates.
-    public func refresh(providerIds: [String], kind: RefreshKind = .interactive) async {
+    public func refresh(
+        providerIds: [String],
+        kind: RefreshKind = .interactive,
+        trigger: RefreshTrigger = .userInitiated
+    ) async {
         var seen = Set<String>()
         let uniqueProviderIds = providerIds.filter { providerId in
             seen.insert(providerId).inserted
@@ -157,7 +189,7 @@ public final class QuotaMonitor {
         await withTaskGroup(of: Void.self) { group in
             for providerId in uniqueProviderIds {
                 group.addTask {
-                    await self.refresh(providerId: providerId, kind: kind)
+                    await self.refresh(providerId: providerId, kind: kind, trigger: trigger)
                 }
             }
         }
@@ -436,8 +468,11 @@ public final class QuotaMonitor {
     }
 
     /// Refreshes only the currently selected provider.
-    public func refreshSelected(kind: RefreshKind = .interactive) async {
-        await refresh(providerId: selectedProviderId, kind: kind)
+    public func refreshSelected(
+        kind: RefreshKind = .interactive,
+        trigger: RefreshTrigger = .userInitiated
+    ) async {
+        await refresh(providerId: selectedProviderId, kind: kind, trigger: trigger)
     }
 
     /// The `backgroundRefreshFloor`s declared by the providers refreshed each
@@ -498,9 +533,9 @@ public final class QuotaMonitor {
                     // both keep idle energy use low (issue #204).
                     await ProbeExecutionContext.$qualityOfService.withValue(.utility) {
                         if let providerIds {
-                            await self.refresh(providerIds: providerIds, kind: .background)
+                            await self.refresh(providerIds: providerIds, kind: .background, trigger: .automatic)
                         } else {
-                            await self.refreshSelected(kind: .background)
+                            await self.refreshSelected(kind: .background, trigger: .automatic)
                         }
                     }
                     continuation.yield(.refreshed)

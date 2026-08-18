@@ -8,6 +8,9 @@ import Sparkle
 /// The main menu content view with adaptive theme support via AppThemeProvider.
 /// Uses the pluggable theme system for consistent styling across all themes.
 struct MenuContentView: View {
+    /// How many buckets a single provider may contribute in overview mode.
+    static let overviewBucketLimit = 2
+
     let monitor: QuotaMonitor
     let sessionMonitor: SessionMonitor
     let quotaAlerter: QuotaAlerter
@@ -70,12 +73,11 @@ struct MenuContentView: View {
                         .padding(.top, 16)
                         .padding(.bottom, 12)
 
-                    // Provider Pills (hidden in overview mode)
-                    if !settings.overviewModeEnabled {
-                        providerPills
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 16)
-                    }
+                    // Provider pills stay visible in overview mode: the All
+                    // pill is how you get back out again.
+                    providerPills
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
 
                     // Session Indicator (shown when Claude Code is active)
                     if let session = sessionMonitor.activeSession {
@@ -355,14 +357,28 @@ struct MenuContentView: View {
     private var providerPills: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
+                // Overview answers the same question as the pills — "what am I
+                // looking at" — so it belongs in the same control rather than
+                // living only behind a Settings toggle with no way back out.
+                ProviderPill(
+                    providerId: "all",
+                    providerName: "All",
+                    isSelected: settings.overviewModeEnabled,
+                    hasData: true,
+                    iconOverride: "square.grid.2x2.fill"
+                ) {
+                    settings.overviewModeEnabled = true
+                }
+
                 ForEach(enabledProviders, id: \.id) { provider in
                     ProviderPill(
                         providerId: provider.id,
                         providerName: provider.name,
-                        isSelected: provider.id == selectedProviderId,
+                        isSelected: !settings.overviewModeEnabled && provider.id == selectedProviderId,
                         hasData: provider.snapshot != nil
                     ) {
                         // Avoid withAnimation to prevent constraint update loops in MenuBarExtra
+                        settings.overviewModeEnabled = false
                         selectedProviderId = provider.id
                     }
                 }
@@ -462,7 +478,7 @@ struct MenuContentView: View {
             providerSectionHeader(provider: provider)
 
             if let snapshot = provider.snapshot {
-                statsGrid(snapshot: snapshot)
+                statsGrid(snapshot: snapshot, bucketLimit: Self.overviewBucketLimit)
             } else if provider.isSyncing {
                 LoadingSpinnerView()
             } else {
@@ -546,8 +562,11 @@ struct MenuContentView: View {
 
             Spacer()
 
-            // Stale indicator
-            if snapshot.isStale {
+            // Stale indicator. `UsageSnapshot.isStale` is a flat five minutes,
+            // which was right when every popover open refetched. Under
+            // `RefreshPolicy` data is deliberately allowed to age, so the
+            // warning only earns its place once a refresh is actually overdue.
+            if snapshot.isOverdue {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(theme.statusWarning)
@@ -563,17 +582,17 @@ struct MenuContentView: View {
     /// Sections for aggregating providers (e.g. Oh My Pi): one collapsible
     /// block per upstream account, so ten flat cards become scannable.
     @ViewBuilder
-    private func quotaGroupSections(snapshot: UsageSnapshot) -> some View {
+    private func quotaGroupSections(snapshot: UsageSnapshot, bucketLimit: Int? = nil) -> some View {
         let groups = snapshot.quotaGroups
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(groups.enumerated()), id: \.element.id) { groupIndex, group in
                 let baseDelay = Double(groups.prefix(groupIndex).reduce(0) { $0 + $1.quotas.count }) * 0.08
-                quotaGroupSection(group, baseDelay: baseDelay)
+                quotaGroupSection(group, baseDelay: baseDelay, bucketLimit: bucketLimit)
             }
         }
     }
 
-    private func quotaGroupSection(_ group: QuotaGroup, baseDelay: Double) -> some View {
+    private func quotaGroupSection(_ group: QuotaGroup, baseDelay: Double, bucketLimit: Int? = nil) -> some View {
         // Note-only sections (accounts without usable quota data) have no
         // cards to collapse; the note renders inline in the header.
         let isNoteOnly = group.quotas.isEmpty
@@ -640,8 +659,9 @@ struct MenuContentView: View {
                     sharedResetRow(sharedReset)
                 }
 
+                let capped = group.quotas.displayBuckets.capped(to: bucketLimit ?? .max)
                 TwoColumnCardGrid(
-                    items: Array(group.quotas.displayBuckets.enumerated()),
+                    items: Array(capped.shown.enumerated()),
                     id: \.element.id
                 ) { entry in
                     WrappedStatCard(
@@ -650,8 +670,29 @@ struct MenuContentView: View {
                         showsReset: sharedReset == nil
                     )
                 }
+
+                if capped.hidden > 0 {
+                    hiddenBucketsRow(count: capped.hidden)
+                }
             }
         }
+    }
+
+    /// Keeps the cap honest: without this the popover implies a provider has
+    /// two limits when it has nine.
+    private func hiddenBucketsRow(count: Int) -> some View {
+        HStack(spacing: Spacing.xs) {
+            Image(systemName: "ellipsis.circle")
+                .font(theme.font(.caption))
+
+            Text("+\(count) more \(count == 1 ? "limit" : "limits")")
+                .font(theme.font(.caption))
+
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(theme.textTertiary)
+        .padding(.horizontal, Spacing.xs)
+        .accessibilityLabel("\(count) further \(count == 1 ? "limit" : "limits") not shown")
     }
 
     private func sharedResetRow(_ text: String) -> some View {
@@ -668,13 +709,19 @@ struct MenuContentView: View {
         .padding(.horizontal, 4)
     }
 
+    /// Renders a snapshot's buckets.
+    ///
+    /// `bucketLimit` caps how many a provider may contribute — used in
+    /// overview mode, where every provider competes for the same column. nil
+    /// means uncapped: you picked that provider deliberately, so it shows
+    /// everything it has.
     @ViewBuilder
-    private func statsGrid(snapshot: UsageSnapshot) -> some View {
+    private func statsGrid(snapshot: UsageSnapshot, bucketLimit: Int? = nil) -> some View {
         VStack(spacing: 10) {
             // Grouped sections cover aggregating providers even when every
             // account lacks quota data (note-only sections must still render).
             if snapshot.hasQuotaGroups {
-                quotaGroupSections(snapshot: snapshot)
+                quotaGroupSections(snapshot: snapshot, bucketLimit: bucketLimit)
             }
 
             if !snapshot.hasQuotaGroups, !snapshot.quotas.isEmpty {
@@ -686,8 +733,9 @@ struct MenuContentView: View {
 
             if !snapshot.hasQuotaGroups, !snapshot.quotas.isEmpty {
                 let sharedReset = snapshot.quotas.sharedResetDescription()
+                let capped = snapshot.displayBuckets.capped(to: bucketLimit ?? .max)
                 TwoColumnCardGrid(
-                    items: Array(snapshot.displayBuckets.enumerated()),
+                    items: Array(capped.shown.enumerated()),
                     id: \.element.id
                 ) { entry in
                     WrappedStatCard(
@@ -695,6 +743,10 @@ struct MenuContentView: View {
                         delay: Double(entry.offset) * 0.08,
                         showsReset: sharedReset == nil
                     )
+                }
+
+                if capped.hidden > 0 {
+                    hiddenBucketsRow(count: capped.hidden)
                 }
             }
 
@@ -805,9 +857,9 @@ struct MenuContentView: View {
                 isLoading: isCurrentlyRefreshing
             ) {
                 if settings.overviewModeEnabled {
-                    Task { await refreshAllEnabled() }
+                    Task { await refreshAllEnabled(trigger: .userInitiated) }
                 } else {
-                    Task { await refresh(providerId: selectedProviderId) }
+                    Task { await refresh(providerId: selectedProviderId, trigger: .userInitiated) }
                 }
             }
             .keyboardShortcut("r")
@@ -896,39 +948,25 @@ struct MenuContentView: View {
 
     // MARK: - Actions
 
-    /// Refresh all enabled providers concurrently
-    private func refreshAllEnabled() async {
-        await withTaskGroup(of: Void.self) { group in
-            // The `isSyncing` guard reads main-actor provider state, so evaluate
-            // it here on the main actor (this closure inherits the caller's
-            // isolation). Each child task then awaits `refresh()`, whose heavy
-            // probe work still suspends off-main, keeping the refreshes concurrent.
-            for provider in monitor.enabledProviders where !provider.isSyncing {
-                group.addTask {
-                    do {
-                        try await provider.refresh()
-                    } catch {
-                        // Provider stores error in lastError
-                    }
-                }
-            }
-        }
+    /// Refresh all enabled providers concurrently.
+    ///
+    /// Routed through the monitor rather than calling providers directly, so
+    /// `RefreshPolicy` gets a say — opening the popover no longer costs a
+    /// request per provider when nothing can have changed. The monitor holds
+    /// the `isSyncing` guard that used to live here.
+    private func refreshAllEnabled(trigger: RefreshTrigger = .automatic) async {
+        await monitor.refresh(
+            providerIds: monitor.enabledProviders.map(\.id),
+            trigger: trigger
+        )
     }
 
-    /// Refresh a specific provider by ID
-    private func refresh(providerId: String) async {
-        guard let provider = monitor.provider(for: providerId) else {
-            return
-        }
-
-        // Provider.isSyncing is observable - prevents duplicate refreshes
-        guard !provider.isSyncing else { return }
-
-        do {
-            try await provider.refresh()
-        } catch {
-            // Provider stores error in lastError
-        }
+    /// Refresh a specific provider by ID.
+    ///
+    /// Routed through the monitor so `RefreshPolicy` applies; it also owns the
+    /// `isSyncing` guard that prevents duplicate concurrent refreshes.
+    private func refresh(providerId: String, trigger: RefreshTrigger = .automatic) async {
+        await monitor.refresh(providerId: providerId, trigger: trigger)
     }
 
     /// Fetch guest passes and show the share view
@@ -959,6 +997,8 @@ struct ProviderPill: View {
     let providerName: String
     let isSelected: Bool
     let hasData: Bool
+    /// Overrides the provider-derived symbol — the All pill is not a provider.
+    var iconOverride: String? = nil
     let action: () -> Void
 
     @Environment(\.appTheme) private var theme
@@ -999,7 +1039,7 @@ struct ProviderPill: View {
     }
 
     private var providerIcon: String {
-        ProviderVisualIdentityLookup.symbolIcon(for: providerId)
+        iconOverride ?? ProviderVisualIdentityLookup.symbolIcon(for: providerId)
     }
 }
 

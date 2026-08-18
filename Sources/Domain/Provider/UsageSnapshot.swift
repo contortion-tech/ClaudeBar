@@ -163,6 +163,18 @@ public struct UsageSnapshot: Sendable, Equatable {
         age > 300 // 5 minutes
     }
 
+    /// Whether a refresh is actually overdue for this snapshot.
+    ///
+    /// `isStale`'s flat five minutes was calibrated when every popover open
+    /// refetched. `RefreshPolicy` deliberately lets data age — half an hour is
+    /// expected when nothing is near resetting — so a warning keyed to
+    /// `isStale` would fire almost always and mean nothing. This asks the
+    /// policy instead, so the indicator only appears when the app really has
+    /// failed to refresh something it should have.
+    public var isOverdue: Bool {
+        age > RefreshPolicy.maxAge(for: quotas, now: Date())
+    }
+
     /// Human-readable age description
     public var ageDescription: String {
         let seconds = Int(age)

@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Providers are only fetched when the answer can have changed. Opening the
+  popover used to cost a request per provider; a quota sitting at 100% with
+  hours left cannot return anything interesting. Data may now age up to half an
+  hour when nothing is near resetting, tightening to two minutes once a reset is
+  within thirty. Explicit refreshes and providers in an error state always go
+  through — a broken provider is the state most worth re-checking.
+- Overview mode shows at most two limits per provider, chosen by lowest
+  remaining so the cap only ever hides quotas that are fine, with a "+N more"
+  row so it cannot imply a provider has fewer limits than it does. No cap when a
+  single provider is selected.
+- An "All" pill at the head of the provider row toggles overview mode. The row
+  now stays visible in overview, which also gives it a way back out — previously
+  the only exit was the Settings toggle.
+
+### Fixed
+- Model names keep their casing. `QuotaType.displayName` capitalised every
+  label, turning Antigravity's "GPT-OSS 120B (Medium)" into "Gpt-Oss 120B
+  (Medium)" wherever a label is shown unmodified, such as the bucket tooltip.
+- The stale-data warning no longer fires on data that is deliberately being
+  kept. It was a flat five minutes, which made sense when every open refetched;
+  it now asks the refresh policy whether a fetch is actually overdue.
 - Manual reset entry, on a quota card's right-click menu, for providers that
   report usage but never say when it resets. It fills silence only — a reset the
   provider actually reports still wins — so there is no conflict to resolve.

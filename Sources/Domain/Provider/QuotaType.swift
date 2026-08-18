@@ -20,7 +20,10 @@ public enum QuotaType: Sendable, Equatable, Hashable {
         case .weekly:
             "Weekly"
         case .modelSpecific(let modelName):
-            modelName.capitalized
+            // Bare identifiers ("opus") want capitalising; labels a provider
+            // already formatted ("GPT-OSS 120B (Medium)") do not — `.capitalized`
+            // lowercases the rest of each word and turns that into "Gpt-Oss".
+            modelName.contains(where: \.isUppercase) ? modelName : modelName.capitalized
         case .timeLimit(let name):
             name
         }

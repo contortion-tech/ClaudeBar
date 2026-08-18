@@ -208,3 +208,22 @@ struct QuotaDurationTests {
         #expect(QuotaDuration.hours(24) != .days(1)) // Same seconds, different types
     }
 }
+
+// MARK: - Model label formatting
+
+@Suite("Scenario: Model-specific display names")
+struct ModelDisplayNameTests {
+
+    @Test
+    func `a bare identifier is capitalised`() {
+        #expect(QuotaType.modelSpecific("opus").displayName == "Opus")
+    }
+
+    @Test
+    func `a provider's own label keeps its casing`() {
+        // Antigravity sends "GPT-OSS 120B (Medium)"; `.capitalized` would
+        // render that as "Gpt-Oss 120B (Medium)" in the bucket tooltip.
+        #expect(QuotaType.modelSpecific("GPT-OSS 120B (Medium)").displayName == "GPT-OSS 120B (Medium)")
+        #expect(QuotaType.modelSpecific("Claude Sonnet 4.5").displayName == "Claude Sonnet 4.5")
+    }
+}

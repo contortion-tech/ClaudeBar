@@ -58,14 +58,15 @@ struct DetectionTests {
     }
 
     @Test
-    func `should keep a built-in's id for the built-in`() throws {
+    func `should let a custom file replace the built-in it names`() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         try write(custom: "warp", name: "Not Warp")
 
         let warps = detect().filter { $0.id == "warp" }
 
         #expect(warps.count == 1)
-        #expect(warps.first?.profile.name == "Warp")
+        #expect(warps.first?.profile.name == "Not Warp")
+        #expect(warps.first?.profile.origin == .custom)
     }
 
     @Test

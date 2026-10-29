@@ -451,4 +451,49 @@ struct ZaiDefinitionTests {
         #expect(snapshot.quotas.contains { $0.quotaType == .weekly })
         #expect(snapshot.quotas.contains { $0.quotaType == .timeLimit("MCP") })
     }
+
+    // MARK: - ZCode host log parsing
+    //
+    // With no Z.ai API key set, the api data source hands off to ZCode's own
+    // data source, which reads the newest `billing/balance 请求完成` line of
+    // ~/.zcode/v2/logs/<day>.log through this same script. The top-level
+    // balances carry no window; `payload.data.balances` does.
+
+    static let sampleZcodeLog = """
+    [2026-10-29 22:15:07.804] [info] [pid:52854] [main] [host-log] (local-1) [host] [2026-10-29 22:15:07.804] [pid:52883] [usage-stats] billing/balance 请求完成 {"balanceCount":1,"balances":[{"entitlement_id":"ent-1","show_name":"GLM-5.3-Flash","total_units":300000000,"used_units":50000000,"remaining_units":250000000}],"code":0,"msg":"","payload":{"code":0,"msg":"","data":{"server_time":1793300000,"plans":[{"plan_id":"zcode-v3-start-plan-1029","name":"ZCODE GLOBAL BUILD"}],"balances":[{"entitlement_id":"ent-1","show_name":"GLM-5.3-Flash","total_units":300000000,"used_units":50000000,"remaining_units":250000000,"period_start":1793200000,"period_end":1793300000,"expires_at":1793300000}]}}}
+    [2026-10-29 23:15:07.804] [info] [pid:52854] [main] [host-log] (local-1) [host] [2026-10-29 23:15:07.804] [pid:52883] [usage-stats] billing/balance 请求完成 {"balanceCount":1,"balances":[{"entitlement_id":"ent-1","show_name":"GLM-5.3-Flash","total_units":300000000,"used_units":34363915,"remaining_units":265636085}],"code":0,"msg":"","payload":{"code":0,"msg":"","data":{"server_time":1793312107,"plans":[{"plan_id":"zcode-v3-start-plan-1029","name":"ZCODE GLOBAL BUILD"}],"balances":[{"entitlement_id":"ent-1","show_name":"GLM-5.3-Flash","total_units":300000000,"used_units":34363915,"remaining_units":265636085,"period_start":1793277585,"period_end":1793322000,"expires_at":1793322000}]}}}
+    """
+
+    @Test
+    func `should read ZCode's 300M plan balance from its host log`() throws {
+        let snapshot = try read(Data(Self.sampleZcodeLog.utf8), providerId: "zai")
+
+        #expect(snapshot.quotas.count == 2)
+        let session = try #require(snapshot.quotas.first { $0.quotaType == .session })
+        #expect(abs(session.percentRemaining - 88.54536166666667) < 0.001)
+        #expect(session.resetsAt == Date(timeIntervalSince1970: 1_793_322_000))
+        #expect(session.windowDuration == 44_415)
+        #expect(snapshot.quotas.contains { $0.quotaType == .modelSpecific("GLM-5.3-Flash (265.6M/300M)") })
+        #expect(snapshot.accountTier == .custom("ZCODE GLOBAL BUILD"))
+    }
+
+    @Test
+    func `should read the newest balance line when the log holds several`() throws {
+        let snapshot = try read(Data(Self.sampleZcodeLog.utf8), providerId: "zai")
+
+        // The older line's balance (250000000 left, 83.3%) loses to the newest.
+        let session = try #require(snapshot.quotas.first { $0.quotaType == .session })
+        #expect(abs(session.percentRemaining - 88.54536166666667) < 0.001)
+    }
+
+    @Test
+    func `should still fail to read a ZCode log that holds no balance line`() throws {
+        let log = """
+        [2026-10-29 23:00:00.000] [info] [pid:1] [main] session started
+        [2026-10-29 23:01:00.000] [info] [pid:1] [main] turn finished
+        """
+        #expect(throws: UsageError.self) {
+            try read(Data(log.utf8), providerId: "zai")
+        }
+    }
 }

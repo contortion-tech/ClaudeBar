@@ -17,19 +17,23 @@ public struct ProviderCatalog: Sendable {
     }
 
     /// Every definition, built-in, custom and extension, in lineup order:
-    /// by each one's `order`, then by name. A built-in's id is the
-    /// built-in's — another file using it is left out. A file that doesn't
-    /// parse is logged and left out; the rest load.
+    /// by each one's `order`, then by name. A custom file may carry a
+    /// built-in's id: it replaces the built-in, so a person's `zai.json`
+    /// outlives an app update that ships its own. An extension using a
+    /// built-in's id is still left out. A file that doesn't parse is logged
+    /// and left out; the rest load.
     public func detect() -> [ProviderDefinition] {
         let builtIns = Array(ProviderFactory.builtInDefinitions.values)
         let reserved = Set(builtIns.map(\.id))
-        let others = (custom() + Extensions.catalog(in: extensions)).filter { definition in
+        let customs = custom()
+        let overrides = customs.filter { reserved.contains($0.id) }
+        let others = customs.filter { !reserved.contains($0.id) } + Extensions.catalog(in: extensions).filter { definition in
             guard reserved.contains(definition.id) else { return true }
             AppLog.providers.error("Skipping \(definition.id) from \(definition.profile.origin.rawValue): a built-in has that id")
             return false
         }
         var seen = Set<String>()
-        return (builtIns + others)
+        return (overrides + builtIns + others)
             .filter { seen.insert($0.id).inserted }
             .sorted { ($0.order ?? .max, $0.profile.name.lowercased(), $0.id) < ($1.order ?? .max, $1.profile.name.lowercased(), $1.id) }
     }

@@ -24,6 +24,38 @@
     { "id": "glmAuthEnvVar", "label": "Environment variable", "default": "ZAI_API_KEY" }
   ],
   "defaultDataSource": "api",
+  "usageHistory": {
+    "records": {
+      "sqlite": {
+        "path": "~/.zcode/cli/db/db.sqlite",
+        "queries": [
+          {
+            "requires": ["message"],
+            "query": "SELECT id, json_extract(data, '$.role') AS role, json_extract(data, '$.modelId') AS model, json_extract(data, '$.path.cwd') AS project, CAST(json_extract(data, '$.time.created') AS INTEGER) / 1000 AS at, json_extract(data, '$.tokens.input') AS input, json_extract(data, '$.tokens.output') AS output, json_extract(data, '$.tokens.reasoning') AS reasoning, json_extract(data, '$.tokens.cache.write') AS cacheWrite, json_extract(data, '$.tokens.cache.read') AS cacheRead, json_extract(data, '$.cost') AS cost FROM message WHERE json_valid(data) AND json_extract(data, '$.role') = 'assistant' AND json_type(data, '$.time.created') IN ('integer', 'real') ORDER BY time_created"
+          }
+        ]
+      },
+      "shapes": [
+        {
+          "where": { "path": "$.role", "equals": "assistant" },
+          "at": "$.at",
+          "id": ["$.id"],
+          "model": "$.model",
+          "project": "$.project",
+          "tokens": {
+            "input": "$.input",
+            "output": "$.output",
+            "reasoningOutput": "$.reasoning",
+            "cacheWrite": "$.cacheWrite",
+            "cacheRead": "$.cacheRead",
+            "inputIncludesCacheRead": true
+          },
+          "cost": "$.cost"
+        }
+      ]
+    },
+    "sessionGap": 1800
+  },
   "dataSources": [
     {
       "kind": "api",
@@ -52,6 +84,18 @@
             "Accept-Language": "en-US,en",
             "Content-Type": "application/json"
           }
+        }
+      },
+      "mapping": { "script": { "file": "zai-usage.js" } },
+      "fallbackOn": { "authenticationRequired": "zcode" }
+    },
+    {
+      "kind": "zcode",
+      "label": "ZCode",
+      "summary": "Reads your ZCode Global Build token balance from ~/.zcode/v2/logs",
+      "fetch": {
+        "file": {
+          "path": "~/.zcode/v2/logs/*.log"
         }
       },
       "mapping": { "script": { "file": "zai-usage.js" } }

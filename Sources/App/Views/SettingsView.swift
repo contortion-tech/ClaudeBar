@@ -37,6 +37,9 @@ struct SettingsContentView: View {
         static let deepseek = "deepseek"
         static let alibaba = "alibaba"
         static let vercelGateway = "vercel-gateway"
+        static let antigravity = "antigravity"
+        static let cursor = "cursor"
+        static let grok = "grok"
     }
 
     private var isCopilotEnabled: Bool {
@@ -77,6 +80,18 @@ struct SettingsContentView: View {
 
     private var isVercelEnabled: Bool {
         monitor.provider(for: ProviderID.vercelGateway)?.isEnabled ?? false
+    }
+
+    private var isAntigravityEnabled: Bool {
+        monitor.provider(for: ProviderID.antigravity)?.isEnabled ?? false
+    }
+
+    private var isCursorEnabled: Bool {
+        monitor.provider(for: ProviderID.cursor)?.isEnabled ?? false
+    }
+
+    private var isGrokEnabled: Bool {
+        monitor.provider(for: ProviderID.grok)?.isEnabled ?? false
     }
 
     /// Extension providers that are enabled and have config fields declared in their manifest.
@@ -148,6 +163,18 @@ struct SettingsContentView: View {
                     }
                     if isBedrockEnabled {
                         BedrockConfigCard(monitor: monitor)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                    if isAntigravityEnabled {
+                        AntigravityConfigCard(monitor: monitor)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                    if isCursorEnabled {
+                        CursorConfigCard(monitor: monitor)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                    if isGrokEnabled {
+                        GrokConfigCard(monitor: monitor)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                     ForEach(enabledExtensionProvidersWithConfig, id: \.id) { extProvider in

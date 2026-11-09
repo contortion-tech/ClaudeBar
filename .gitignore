@@ -21,3 +21,12 @@ build/
 
 # Local drafts that are never committed
 drafts/
+
+# Auto-added by git_compact_2commits to protect repo size
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.zip
+*.tar.gz
+node_modules/

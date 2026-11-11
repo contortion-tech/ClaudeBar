@@ -39,6 +39,9 @@ struct ClaudeBarApp: App {
     /// *Quota alerts* — the person's own percentages (#68).
     @State private var quotaAlerts: QuotaAlerts
 
+    /// *Reset alerts* — countdowns and window-turn notices (MJ-103).
+    @State private var quotaResetScheduler: QuotaResetAlertScheduler
+
     /// *Rest when empty* — the products asked to rest, dimmed, while every
     /// login has run out. Their switches stay the person's.
     @State private var restWhenEmpty: RestWhenEmpty
@@ -183,6 +186,11 @@ struct ClaudeBarApp: App {
         quotaAlerts.follow(monitor)
         // *Status alerts* follow every refresh too: a login's status got worse under the policy.
         StatusAlerts(destination: destinations).follow(monitor)
+        // *Reset alerts* follow every refresh too (MJ-103): windows about to
+        // turn, and the estate's ZCode 300M 16:00 Europe/Oslo daily refresh.
+        let quotaResetScheduler = QuotaResetAlertScheduler(destination: QuotaResetNotifications())
+        self.quotaResetScheduler = quotaResetScheduler
+        quotaResetScheduler.follow(monitor)
         // The weekly recap reads the lineup's usage history when the All page
         // asks; it decides for itself when it is stale.
         recaps = Recaps(monitor: monitor, calendar: DataSources.calendar())
@@ -455,6 +463,7 @@ struct ClaudeBarApp: App {
             }
             .environment(newSessions)
             .environment(quotaAlerts)
+            .environment(quotaResetScheduler)
             .environment(restWhenEmpty)
             .environment(\.isPopoverShown, isMenuPresented)
             // Opening/closing the dropdown flips `isMenuPresented`, which makes
@@ -508,6 +517,7 @@ struct ClaudeBarApp: App {
             }
             .environment(newSessions)
             .environment(quotaAlerts)
+            .environment(quotaResetScheduler)
             .environment(restWhenEmpty)
             .environment(webhooks)
         }

@@ -23,6 +23,8 @@ struct MenuContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(NewSessions.self) private var newSessions
     @Environment(RestWhenEmpty.self) private var restWhenEmpty
+    /// *Reset alerts* — live countdowns and window-turn notices (MJ-103).
+    @Environment(QuotaResetAlertScheduler.self) private var quotaResetScheduler
     /// The user's Text Size choice, injected where the popover is hosted. The
     /// popover's fonts and its width both resolve against this value, so they
     /// can never disagree about how big the popover is.
@@ -394,9 +396,61 @@ struct MenuContentView: View {
                 ScoreLineView(line: scoreLine)
             }
             brandRow
+            chromeFooterRow
         }
         .opacity(animateIn ? 1 : 0)
         .offset(y: animateIn ? 0 : -10)
+    }
+
+    // MARK: - Chrome Footer (MJ-103)
+
+    /// The header's chrome line: the live reset countdown of what the person
+    /// is looking at, and the version ticker — both subtle and monospaced.
+    private var chromeFooterRow: some View {
+        HStack(spacing: 8) {
+            resetCountdownText
+            Spacer(minLength: 0)
+            versionTickerText
+        }
+    }
+
+    /// The soonest window of the selected login — every login on the All
+    /// page — ticking with the popover's frame clock.
+    @ViewBuilder
+    private var resetCountdownText: some View {
+        WindowFrameTicker(interval: 30) { now in
+            if let line = Self.resetLine(
+                countdowns: quotaResetScheduler.countdowns,
+                providerId: showsAll ? nil : selectedProviderId,
+                now: now
+            ) {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 9))
+                    Text(verbatim: line)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                }
+                .foregroundStyle(.tertiary)
+                .accessibilityLabel(line)
+            }
+        }
+    }
+
+    /// The countdown line for one refresh's countdown ledger: nil when
+    /// nothing is being watched (pure, unit-tested).
+    static func resetLine(countdowns: [QuotaResetCountdown], providerId: String?, now: Date) -> String? {
+        let relevant = countdowns.filter { providerId == nil || $0.providerId == providerId }
+        guard let soonest = relevant.min(by: { $0.resetsAt < $1.resetsAt }) else { return nil }
+        let text = QuotaCountdownFormatter.countdown(until: soonest.resetsAt, now: now)
+        return "Resets in \(text)"
+    }
+
+    private var versionTickerText: some View {
+        Text(verbatim: VersionTicker.text(info: Bundle.main.infoDictionary ?? [:]))
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+            .accessibilityLabel("ClaudeBar version \(VersionTicker.text(info: Bundle.main.infoDictionary ?? [:]))")
     }
 
     /// The selected tab as a game's score line: its name and status word,

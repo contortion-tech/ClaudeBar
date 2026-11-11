@@ -13,11 +13,11 @@ let project = Project(
         base: [
             "SWIFT_VERSION": "6.0",
             "MACOSX_DEPLOYMENT_TARGET": "15.0",
-            "ENABLE_DEBUG_DYLIB": "YES",
+            "ENABLE_DEBUG_DYLIB": "NO",
         ],
         debug: [
             "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "DEBUG MOCKING",
-            "ENABLE_DEBUG_DYLIB": "YES",
+            "ENABLE_DEBUG_DYLIB": "NO",
         ],
         release: [
             "SWIFT_ACTIVE_COMPILATION_CONDITIONS": "MOCKING",
@@ -57,6 +57,7 @@ let project = Project(
             sources: ["../Sources/Infrastructure/**"],
             dependencies: [
                 .target(name: "Domain"),
+                .external(name: "Quotas"),
                 .external(name: "Diagnostics"),
                 .external(name: "DataSources"),
                 .external(name: "Mockable"),
@@ -99,7 +100,7 @@ let project = Project(
             settings: .settings(
                 base: [
                     "SWIFT_STRICT_CONCURRENCY": "complete",
-                    "ENABLE_DEBUG_DYLIB": "YES",
+                    "ENABLE_DEBUG_DYLIB": "NO",
                     "ENABLE_PREVIEWS": "YES",
                     "CODE_SIGN_IDENTITY": "-",
                     "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",

@@ -57,6 +57,7 @@ let project = Project(
             sources: ["../Sources/Infrastructure/**"],
             dependencies: [
                 .target(name: "Domain"),
+                .external(name: "Quotas"),
                 .external(name: "Diagnostics"),
                 .external(name: "DataSources"),
                 .external(name: "Mockable"),

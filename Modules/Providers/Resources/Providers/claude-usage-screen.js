@@ -27,9 +27,22 @@ function read(response, context) {
     return { error: error };
   }
 
-  var plan = planFrom(lower);
+  var plan = planFrom(lower, account);
   var session = percent(lines, ["Current session"]);
-  if (session === null) {
+  var weekly = percent(lines, ["Current week (all models)"]);
+  // A verified Ultra account has no 5-hour limit: the screen has no session
+  // row at all, only the weekly ones. Pro and Max always have one, so on their
+  // screens, as on a session row without its number, the row is still loading.
+  var noSessionLimit = plan === "ULTRA" && session === null && weekly !== null && !hasRow(lines, "Current session");
+  var barsRead = session !== null || noSessionLimit;
+  // A rate limit fails the read, so the API fallback runs — not `rateLimited`:
+  // the CLI's limit is not the API's. Once the bars have their numbers, a
+  // throttled per-model breakdown under the advice heading is not theirs (#677);
+  // rate-limit text anywhere else is, even below bars a redraw left in scrollback.
+  if (rateLimited(lines) && !(barsRead && onlyBreakdownRateLimited(lines))) {
+    return { error: { executionFailed: "Rate limited - too many requests" } };
+  }
+  if (!barsRead) {
     if (lower.indexOf("loading usage data") !== -1) {
       return { error: { executionFailed: "Claude usage data did not finish loading — the usage endpoint may be rate limited. Try again in a moment." } };
     }
@@ -43,11 +56,9 @@ function read(response, context) {
     return { error: { parseFailed: "Could not find session usage" } };
   }
 
-  var sessionReset = resetText(lines, "Current session");
   var weeklyReset = resetText(lines, "Current week");
-  var quotas = [quota("session", null, session, sessionReset)];
-
-  var weekly = percent(lines, ["Current week (all models)"]);
+  var quotas = [];
+  if (session !== null) quotas.push(quota("session", null, session, resetText(lines, "Current session")));
   if (weekly !== null) quotas.push(quota("weekly", null, weekly, weeklyReset));
 
   var opus = percent(lines, ["Current week (Opus)"]);
@@ -89,28 +100,107 @@ function usageError(lower) {
   if (lower.indexOf("not logged in") !== -1 || lower.indexOf("please log in") !== -1) return "authenticationRequired";
   if (lower.indexOf("update required") !== -1 || lower.indexOf("please update") !== -1) return "updateRequired";
   if (lower.indexOf("/usage is only available for subscription plans") !== -1) return "subscriptionRequired";
-  var rateLimited = (lower.indexOf("rate limited") !== -1 ||
-                     lower.indexOf("rate limit exceeded") !== -1 ||
-                     lower.indexOf("too many requests") !== -1) &&
-                    lower.indexOf("rate limits are") === -1;
-  // Not `rateLimited`: the CLI's limit is not the API's, so the API fallback still runs.
-  if (rateLimited) return { executionFailed: "Rate limited - too many requests" };
   return null;
 }
 
-// The header names the plan; a screen without one is a Max subscription.
-function planFrom(lower) {
-  if (lower.indexOf("· claude pro") !== -1 || lower.indexOf("·claude pro") !== -1) return "claudePro";
-  return "claudeMax";
+function rateLimited(lines) {
+  for (var i = 0; i < lines.length; i++) {
+    if (isRateLimitRow(lines[i])) return true;
+  }
+  return false;
 }
 
-// The first "NN% used|left" within 12 lines of a label, as percent left.
+// A row that says the CLI is rate limited. "rate limits are" is a promotion
+// ("rate limits are 2x higher"), not an error; it clears only its own row, so
+// an error row elsewhere still counts.
+function isRateLimitRow(line) {
+  var lower = line.toLowerCase();
+  return (lower.indexOf("rate limited") !== -1 ||
+          lower.indexOf("rate limit exceeded") !== -1 ||
+          lower.indexOf("too many requests") !== -1) &&
+         lower.indexOf("rate limits are") === -1;
+}
+
+// Every rate-limit row is the throttled breakdown's own line ("Per-model
+// breakdown unavailable (rate limited …)"): a row that mentions the breakdown,
+// below the advice heading with no section label between them. The usage
+// panel's "Session" heading, which a later frame paints, ends the advice too.
+// The breakdown's line always follows its heading, so a capture with the line
+// has the heading too. Any other rate-limit row, even one under the heading in
+// scrollback, is a later frame's CLI-wide error.
+function onlyBreakdownRateLimited(lines) {
+  var inAdvice = false;
+  for (var i = 0; i < lines.length; i++) {
+    var row = lines[i].trim().toLowerCase();
+    var label = isSectionStart(lines[i]) || row === "session";
+    // A label's own row, the advice heading's included, isn't advice: a later
+    // frame can paint an error over it.
+    var breakdown = inAdvice && !label && row.indexOf("breakdown") !== -1;
+    if (isRateLimitRow(lines[i]) && !breakdown) return false;
+    if (label) inAdvice = row.indexOf(ADVICE_HEADING) === 0;
+  }
+  return true;
+}
+
+// The plan the header names ("· Claude Pro", "· Claude Ultra", "· Claude Team").
+// Claude Code prints "Claude Max" for an Ultra account until it has the plan's
+// new name, so Max, and a screen with no header, take the plan from the
+// account `~/.claude.json` describes; with neither, a Max subscription.
+function planFrom(lower, account) {
+  var named = /·\s*claude (pro|max|ultra|team|enterprise)\b/.exec(lower);
+  var word = named ? named[1] : null;
+  if (word === "pro") return "claudePro";
+  if (word === "ultra") return "ULTRA";
+  if (word === "team") return "TEAM";
+  if (word === "enterprise") return "ENTERPRISE";
+  return planFromAccount(account) || "claudeMax";
+}
+
+// `oauthAccount.organizationType` and `organizationRateLimitTier`: Ultra is the
+// old Max 20x, a Max organization on the 20x limits.
+function planFromAccount(account) {
+  switch (account.organizationType) {
+    case "claude_max": return account.rateLimitTier === "default_claude_max_20x" ? "ULTRA" : "claudeMax";
+    case "claude_team": return "TEAM";
+    case "claude_enterprise": return "ENTERPRISE";
+    default: return null;
+  }
+}
+
+// A row that starts with `label`, as the TUI paints a section label — not the
+// same words inside a sentence, such as a hook's "the current session will…".
+function hasRow(lines, label) {
+  var wanted = label.toLowerCase();
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].trim().toLowerCase().indexOf(wanted) === 0) return true;
+  }
+  return false;
+}
+
+// The rows the TUI paints as a section's label: where the section above ends.
+// "What's contributing to your limits usage?" (2.1.289) or "…to your usage?"
+// (2.1.316) heads the advice below the bars.
+var ADVICE_HEADING = "what's contributing to your";
+var SECTION_STARTS = ["current session", "current week", "extra usage", ADVICE_HEADING];
+
+function isSectionStart(line) {
+  var row = line.trim().toLowerCase();
+  for (var k = 0; k < SECTION_STARTS.length; k++) {
+    if (row.indexOf(SECTION_STARTS[k]) === 0) return true;
+  }
+  return false;
+}
+
+// The first "NN% used|left" within 12 lines of a label, and before the next
+// section's label — a row still waiting for its number never borrows the
+// next bar's — as percent left.
 function percent(lines, labels) {
   for (var l = 0; l < labels.length; l++) {
     var label = labels[l].toLowerCase();
     for (var i = 0; i < lines.length; i++) {
       if (lines[i].toLowerCase().indexOf(label) === -1) continue;
       for (var j = i; j < Math.min(lines.length, i + 12); j++) {
+        if (j > i && isSectionStart(lines[j])) break;
         var match = /([0-9]{1,3})\s*%\s*(used|left)/i.exec(lines[j]);
         if (match) {
           var value = parseInt(match[1], 10);
@@ -122,12 +212,14 @@ function percent(lines, labels) {
   return null;
 }
 
-// The reset line within 14 lines of a label, without a redraw's repeats.
+// The reset line within 14 lines of a label and before the next section's
+// label, without a redraw's repeats.
 function resetText(lines, labelText) {
   var label = labelText.toLowerCase();
   for (var i = 0; i < lines.length; i++) {
     if (lines[i].toLowerCase().indexOf(label) === -1) continue;
     for (var j = i; j < Math.min(lines.length, i + 14); j++) {
+      if (j > i && isSectionStart(lines[j])) break;
       var lower = lines[j].toLowerCase();
       if (lower.indexOf("reset") !== -1 ||
           (lower.indexOf("in") !== -1 && (lower.indexOf("h") !== -1 || lower.indexOf("m") !== -1))) {

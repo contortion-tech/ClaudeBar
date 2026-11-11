@@ -8,6 +8,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **The log loses no line to a race**: on Windows a new log's first line could vanish while a program started, and when two ClaudeBar processes wrote the log at once (the Windows app and its upload), one could overwrite or throw away the other's lines. ([#696](https://github.com/tddworks/ClaudeBar/issues/696))
+- **A program that ends right after logging keeps its last lines**: the log writes each line on a queue of its own, which `exit` ended with the lines still on it, so ClaudeBar for Windows' hourly upload never logged its outcome. `AppLog.flush()` waits for them. ([#701](https://github.com/tddworks/ClaudeBar/issues/701))
+- **On Windows, usage history no longer takes minutes to read a big log folder**: listing it opened every file to read it, and the antivirus scanned each one, so omp's 15,000 session files took 1–3 minutes once unread for 20 minutes. No file is opened now. ([#704](https://github.com/tddworks/ClaudeBar/issues/704))
+- **A day that appears or grows after an upload now reaches the Leaderboard**: a provider shared later, a login added later or a session past midnight left those days off the board, or short on it. Such a day now goes again with its whole total; one that reads smaller isn't sent. ([#680](https://github.com/tddworks/ClaudeBar/issues/680))
+
+### Added
+- **UberLLM prepaid balance**: a new UberLLM provider shows the credit your new requests can still use, in dollars, from an API key pasted in Settings → Providers → UberLLM or from `UBERLLM_API_KEY`. Off by default. ([#706](https://github.com/tddworks/ClaudeBar/pull/706)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/uberllm/README.md)
+
+---
+
+## [0.5.26] - 2026-11-09
+
+### Fixed
+- **DeepSeek no longer flips to "$0.00" and "quota depleted" when your account holds several currencies**: DeepSeek lists them in a changing order and ClaudeBar read the first, so an empty USD entry could replace your CNY balance. It now shows the currency that has money. ([#684](https://github.com/tddworks/ClaudeBar/issues/684)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/deepseek/README.md)
+- **Linux finds a CLI installed with nvm, Volta, fnm, mise or asdf without a shell**: a service or `wsl.exe -e` didn't read the shell setup that puts their folders on `PATH`. nvm's default version comes first, and the CLI runs on its manager's Node, not an older one in `/usr/bin`. ([#682](https://github.com/tddworks/ClaudeBar/issues/682))
+- **In WSL, Claude and Codex are read instead of timing out**: WSL takes back an idle distro's memory, so their CLIs started from the disk, 18–24 s for Claude and 11–19 s for Codex, past their 20 s and 15 s. They now get time to start there; one that answers at once is read as before. ([#685](https://github.com/tddworks/ClaudeBar/issues/685))
+- **On Windows, a renewed login is no longer lost when a program starts**: a save made while the app started a program, such as the hourly upload's `schtasks.exe`, could fail and leave Claude or Codex signed out; usage history's kept days and scans were lost the same way. ([#692](https://github.com/tddworks/ClaudeBar/issues/692))
+- **The log keeps its errors for what went wrong**: a CLI that isn't installed and a Keychain item that isn't there were errors at every refresh, all 864 a day on one Windows PC. A missing CLI is now noted once, and on the Mac a Keychain that refuses a read says so again. ([#693](https://github.com/tddworks/ClaudeBar/issues/693))
+
+### Added
+- **Runcrate credit balance**: a new Runcrate provider shows your remaining credits in dollars, from an API key pasted in Settings → Providers → Runcrate or from `RUNCRATE_API_KEY`. Off by default. ([#688](https://github.com/tddworks/ClaudeBar/pull/688)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/runcrate/README.md)
+
+---
+
+## [0.5.25] - 2026-11-03
+
+### Changed
+- **Usage history no longer re-reads today's logs after a relaunch**: what a scan read is kept in `~/.claudebar/usage-history/scans/`, so a new process reads only what was added since. On Windows the hourly upload's read went from 117 s to 3 s. ([#659](https://github.com/tddworks/ClaudeBar/pull/659)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/features/usage-history/daily-usage/README.md)
+- **Copilot measures your AI credits against your plan**: Billing reads GitHub's AI credit report and asks for your Copilot plan (Pro 1,500 credits, Pro+ 7,000, Max 20,000, Business 1,900, Enterprise 3,900) instead of a number that defaulted to 50. ([#662](https://github.com/tddworks/ClaudeBar/pull/662)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/copilot/README.md)
+
+### Fixed
+- **Claude shows its limits when only the per-model breakdown is rate limited**: Claude Code 2.1.316's `/usage` can say "Per-model breakdown unavailable (rate limited …)" below bars that have their numbers, and ClaudeBar failed the whole read as "Rate limited - too many requests". ([#677](https://github.com/tddworks/ClaudeBar/issues/677)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/claude/README.md)
+- **Claude Haiku 5.5's long prompts cost what Anthropic charges**: a message whose prompt, cache included, tops 100,000 tokens pays higher prices, not up to 5× less. An unlisted Opus or Sonnet costs as Opus 5.5 or Sonnet 5.5; Bedrock prices all current Claude models (was $0). ([#676](https://github.com/tddworks/ClaudeBar/pull/676)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/features/usage-history/daily-usage/README.md)
+- **Codex shows your credit balance in credits, with no made-up limit**: it read "$0 spent of $1,000" in API mode. A **Credits** card now shows the balance as Codex's `/status` does, "62,500 credits" or "Unlimited", in RPC mode too. ([#675](https://github.com/tddworks/ClaudeBar/pull/675)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/codex/README.md)
+- **Cursor team seats with a spend cap show their usage**: an Enterprise seat that Cursor gives a dollar cap instead of a plan read "No usage data found in Cursor response". It now shows Monthly as dollars left of the cap, and Team Pool when the team shares one. ([#614](https://github.com/tddworks/ClaudeBar/issues/614)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/cursor/README.md)
+- **Kiro gives each bonus grant its own card, and a reset on the 31st no longer shortens the month**: two grants shared one card, and a March 31 reset made a 28-day month. ([#673](https://github.com/tddworks/ClaudeBar/pull/673)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/kiro/README.md)
+- **Kiro shows its credits again with kiro-cli 2.37**: its new engine took `/usage` as a chat message. ClaudeBar now asks the engine directly, and reads `/usage` when the engine gives no usage. ([#671](https://github.com/tddworks/ClaudeBar/issues/671)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/kiro/README.md)
+- **Oh My Pi no longer drops what omp reports**: an account omp signed out reads "Signed out" and why, a balance with no limit shows what's left, saved resets show with their expiry, and Kimi's weekly quota is listed once. ([#663](https://github.com/tddworks/ClaudeBar/pull/663)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/omp/README.md)
+- **Codex Pro's weekly limit is called Weekly, not Session**: Pro has no 5-hour limit. RPC mode now shows your plan too, and a card shows how many usage limit resets you have. ([#664](https://github.com/tddworks/ClaudeBar/pull/664)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/codex/README.md)
+- **OpenRouter says when a key can't read credits**: OpenRouter now shows the balance only to a Management key, and ClaudeBar showed the 403 a regular API key gets as "Authentication required". The card now says to create a Management key. ([#665](https://github.com/tddworks/ClaudeBar/pull/665)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/openrouter/README.md)
+- **Bedrock prices Claude through `global.` profiles, and Claude 5 and 5.5**: they cost $0 before, and Opus 4.5 was priced at $15/$75 instead of $5/$25. ([#665](https://github.com/tddworks/ClaudeBar/pull/665)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/bedrock/README.md)
+- **Windsurf reads Devin Desktop's plan**: since Windsurf became Devin Desktop, the plan is saved in a `Devin` folder and under a new name; the card showed the old Windsurf copy or nothing. ([#665](https://github.com/tddworks/ClaudeBar/pull/665)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/windsurf/README.md)
+- **Gemini says Google retired its login for individual tiers**: since 2026-06-18 Google refuses the Gemini CLI's Login with Google for Code Assist for individuals, AI Pro and Ultra. The card now says so and points to a Code Assist Standard/Enterprise license or Antigravity. ([#665](https://github.com/tddworks/ClaudeBar/pull/665)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/gemini/README.md)
+- **Antigravity restores Gemini Weekly and Argon quota pools**: uses the official CLI User-Agent to retrieve Gemini rolling pools and the dedicated Argon Weekly bucket. ([#646](https://github.com/tddworks/ClaudeBar/issues/646)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/antigravity/README.md)
+- **Grok shows full remaining for periods without usage, and Kiro parses ISO dates**: an unmetered Grok period displays 100% remaining with countdown, Kiro parses YYYY-MM-DD dates, and empty snapshots show a fallback message. ([#667](https://github.com/tddworks/ClaudeBar/issues/667)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/grok/README.md)
+- **Claude badges Ultra, the plan that was Max 20x**: Max 5x stays MAX, team seats read TEAM, Share stays on Ultra, and a verified Ultra account, with no 5-hour limit, shows its weekly and Fable limits, not an error. Sonnet 5.5 cache reads and Haiku 5.5 cost what Anthropic lists. ([#666](https://github.com/tddworks/ClaudeBar/pull/666)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/claude/README.md)
+
+---
+
+## [0.5.24] - 2026-10-29
+
+### Fixed
 - **Cursor shows usage again after its October update**: newer Cursor seals its sign-in, and cursor.com said "Session expired". ClaudeBar opens it with Cursor's own key: the Keychain item “Cursor Safe Storage” on the Mac (macOS asks to allow it), `Local State` on Windows. ([#655](https://github.com/tddworks/ClaudeBar/issues/655)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/providers/cursor/README.md)
 - **A mapping script that never ends no longer stalls its provider**: a script gets 5 seconds and 256 MB; past either, that refresh fails with the error instead of hanging or filling memory. ([#651](https://github.com/tddworks/ClaudeBar/pull/651)) → [docs](https://github.com/tddworks/ClaudeBar/blob/main/docs/architecture/ENGINE_DESIGN.md)
 
@@ -375,7 +427,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [0.4](docs/changelog/0.4.md) · [0.3](docs/changelog/0.3.md) · [0.2](docs/changelog/0.2.md) · [0.1](docs/changelog/0.1.md)
 
-[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.5.23...HEAD
+[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.5.26...HEAD
+[0.5.26]: https://github.com/tddworks/ClaudeBar/compare/v0.5.25...v0.5.26
+[0.5.25]: https://github.com/tddworks/ClaudeBar/compare/v0.5.24...v0.5.25
+[0.5.24]: https://github.com/tddworks/ClaudeBar/compare/v0.5.23...v0.5.24
 [0.5.23]: https://github.com/tddworks/ClaudeBar/compare/v0.5.22...v0.5.23
 [0.5.22]: https://github.com/tddworks/ClaudeBar/compare/v0.5.21...v0.5.22
 [0.5.21]: https://github.com/tddworks/ClaudeBar/compare/v0.5.20...v0.5.21

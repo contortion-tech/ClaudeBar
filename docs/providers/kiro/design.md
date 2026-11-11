@@ -1,5 +1,5 @@
 ---
-description: Kiro as data — kiro-cli given /usage on stdin, the usage mapping, its windows, and added accounts in their own home folders. Use when changing how Kiro is read.
+description: Kiro as data — the v3 engine's _kiro/account/getUsage over kiro-cli acp, falling back to kiro-cli given /usage on stdin, the usage mapping, its windows, and added accounts in their own home folders. Use when changing how Kiro is read.
 ---
 
 # Kiro: design
@@ -8,13 +8,26 @@ Kiro is `Modules/Providers/Resources/Providers/kiro.json` and `kiro-usage.js`, r
 
 ## Source
 
-A `command`: `kiro-cli` over pipes, given `/usage\n/quit\n` on stdin, with a 30-second timeout. ANSI colour codes are stripped before reading. A missing CLI is `cli.missing` → *CLI not found: kiro-cli*.
+Two data sources, both read by `kiro-usage.js`:
+
+- **`rpc` (default).** A `jsonRpc` fetch: `kiro-cli acp --agent-engine v3`, `initialize`, then `_kiro/account/getUsage`, with a 45-second timeout (the engine takes about 10 seconds to start). It is the request the v3 TUI's own `/usage` screen makes, so it depends on no screen text. Since kiro-cli made the v3 engine its default, `/usage` piped into plain `kiro-cli` reaches the agent as a chat message and prints no usage.
+- **`cli` (fallback).** A `command`: `kiro-cli` over pipes, given `/usage\n/quit\n` on stdin, with a 30-second timeout, for a kiro-cli whose `acp` has no v3 engine or no such method. ANSI colour codes are stripped before reading.
+
+A missing CLI is `cli.missing` → *CLI not found: kiro-cli*.
 
 ## Mapping
 
+From `rpc` (`result.data`):
+
+- each `bonusCredits` entry `{name, used, total, daysUntilExpiry}` → a **Bonus credits** quota, as below. With more than one grant, each is **Bonus credits: `name`** (or **Bonus credits `N`**, its place in the list, when the name is missing or shared), so each grant keeps its own card and can be hidden alone.
+- each `usageBreakdowns` entry with `hasLimit` and a `limit` above zero → a quota, `limit − used` of `limit` left. The `Credits` breakdown is **Monthly**; any other keeps its `displayName`. Its reset date is `billingCycleReset` (`YYYY-MM-DD`).
+
+From `cli`:
+
 - `Bonus credits: X/Y …, expires in N days` → a **Bonus credits** quota, Y−X of Y left, resetting N days from now. It is a grant that expires, not a window that refills, so it states **no window length** (the old probe called it weekly and gave it 7 days).
-- `Credits (X of Y covered in plan)` with `resets on MM/DD` → a **Monthly** quota. The reset date has no year: a date already past this year is next year's. Its window is **the month that ends on that date**, measured in the Mac's own calendar, rather than the old 30-day guess. With no reset date it states no window.
-- Neither line → *No quota data found in Kiro CLI output*.
+- `Credits (X of Y covered in plan)` with `resets on MM/DD` or `resets on YYYY-MM-DD` → a **Monthly** quota. Without a year, a date already past this year is next year's; a full date is taken as it is.
+
+A Monthly window is **the month that ends on the reset date**, measured in the Mac's own calendar, rather than the old 30-day guess. When the previous month is shorter than the reset day (a reset on March 31), it starts on that month's last day. With no reset date it states no window. No quota from either → *No quota data found in Kiro CLI output*; from `rpc` that hands off to `cli`.
 
 ## Accounts
 

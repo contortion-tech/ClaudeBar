@@ -62,16 +62,16 @@ let monitor  = Monitoring.makeMonitor(providers: catalog.load())
 | Module | Context ([model §7](CANONICAL_MODEL.md#7--the-contexts-and-the-modules-that-implement-them)) | Public (the domain) | `Internal/` (the implementation) |
 |---|---|---|---|
 | `Quotas` | Quota · shared kernel | `UsageSnapshot`, `UsageQuota`, `QuotaType`, `QuotaStatus`, `UsagePace`, `CostUsage`, `BudgetStatus`, `AccountTier`, `UsageError`, `Day` (a day of usage history — today `DailyUsageReport`/`Stat`) — today's shapes; the final kernel is the model's `Usage`, `Quota`, `Left`, `Window`, `Status`, `Pace`, `Cost`, `Budget`, `Plan` | — none: pure values, no I/O |
-| `DataSources` | Data Sources | `DataSource`, `DataSourceDefinition`, `Response`, `DataSourceError`, the closed sums `CredentialLookup` · `Fetch` · `Mapping`, `ConfigField`; `UsageLog` and `UsageLog.Definition` (how a login's usage history is extracted from its logs); the ports `CLIExecutor`, `NetworkClient`, `RPCTransport`, `SecretStore`, `CloudWatchClient`, `PriceCatalog`; the factory `DataSources.make(_:providerId:…)` | the workers — `Lookup/`, `Fetch/`, `Mapping/`, `Logs/` — and the implementations of its own ports — `Process/`, `Network/` (§5) |
+| `DataSources` | Data Sources | `DataSource`, `DataSourceDefinition`, `Response`, `DataSourceError`, the closed sums `CredentialLookup` · `Fetch` · `Mapping`, `ConfigField`; `UsageLog` and `UsageLog.Definition` (how a login's usage history is extracted from its logs); the ports `CLIExecutor`, `NetworkClient`, `RPCTransport`, `SecretStore`, `CloudWatchClient`, `PriceCatalog`; the factory `DataSources.make(_:providerId:…)` | the workers — `Lookup/`, `Fetch/`, `Mapping/`, `Logs/` — and the implementations of its own ports — `Process/`, `Network/` (§5); `SingleFlightCache` (`Process/`: one `PATH` or `which` lookup in flight for every login that asks) |
 | `AWSClients` | Data Sources (SDK-backed) | `AWSClients.makeCloudWatch()` → `any CloudWatchClient`, `AWSClients.makePriceCatalog()` → `any PriceCatalog` | the CloudWatch client and the AWS Price List reader; the only module that links AWS |
 | `Providers` | Providers · core | `Provider` (the product), `Account` (a login — today `ProviderAccount`) and its capability handles `usageHistory: UsageHistory?` · `guestPasses` (nil when the definition doesn't offer them), `UsageHistory` (`days(in:)`), `Providers` (the providers you keep: add, delete, order, the lineup), `ProviderFactory`, `ProviderDefinition`, `ProviderCatalog`, `ProviderSettingsRepository`, `CredentialRepository` | definition-file reading, `DayLedger` (closed days, under `~/.claudebar/usage-history/`), `Extensions` (a manifest read as a definition) |
 | `Providers/Resources/Providers/` | — | **the built-in definitions**: `codex.json`, `deepseek.json`, … | |
-| `Monitoring` | Monitoring · conductor | `QuotaMonitor`, `MonitoringEvent`, `RefreshInterval`, `RefreshKind`, `Clock`, `PowerStateProvider` | `SystemClock`, `SystemPowerStateProvider`, `SingleFlightCache` |
+| `Monitoring` | Monitoring · conductor | `QuotaMonitor`, `MonitoringEvent`, `RefreshInterval`, `AdaptiveCadence`, `Clock` and `SystemClock`, `PowerStateProvider` and `PowerEvent`, `ProductTab`, `ProviderBadgeState`; `UsageProbe`, the stubbed login the tests build | — none. `SystemPowerStateProvider` (AppKit, IOKit) and the convenience `init` that injects it stay in the Mac app; the menu bar's readouts are `QuotaMonitor+MenuBar` in `Domain/App` ([#648](https://github.com/tddworks/ClaudeBar/issues/648)) |
 | `Alerting` | Alerting | `QuotaAlerts`, `StatusAlerts`, `Alert`, `AlertDestination`, `Webhooks`, Notify! values, `NotifySettingsRepository`, `WebhookSettingsRepository` | `Notifications`, `SystemAlertSender`, `WebhookClient`, `NotifyGatewayClient` |
 | `Activity` | Activity | `ClaudeSession`, `SessionEvent`, `SessionMonitor`, `NotchActivity`, `HookSettingsRepository` | `HookHTTPServer`, `HookInstaller`, `PortFile` (shared with the local API), `SessionEventParser` |
 | `Leaderboard` | Leaderboard | `LeaderboardMembership`, `DailyTokens`, `Username`, `RequestSigner`, `LeaderboardUploader`, the devices' values (`Device`, `DeviceCode`, `DeviceLabel`), the ports `LeaderboardAPI` · `SigningKeyStore` · `MachineIdentity` · `TokenLogs` ([its design §7](../features/leaderboard/design.md#7--architecture)); the factory `Leaderboard.makeAPI(client:)` · `makeKeyStore()` · `makeMachineIdentity()` | `LeaderboardHTTPClient`; `FallbackSigningKeyStore` over `KeychainSigningKeyStore` (macOS) and `DefaultsSigningKeyStore`; `IOKitMachineIdentity` with `MacModel` (macOS); `CredentialManagerSigningKeyStore` and `WindowsMachineIdentity` (Windows) |
 | `Storage` | Vault & Settings · generic | `Storage.makeSettings()`, `Storage.makeVault()`, `AppSettingsRepository` | `JSONSettingsRepository`, `JSONSettingsStore`, `KeychainCredentialRepository`, `UserDefaults…`, `SecureCredentialMigration` |
-| `Diagnostics` | — cross-cutting | `AppLog` and its categories | the `LogSink`s: `FileLogSink`, `OSLogSink` (macOS) |
+| `Diagnostics` | — cross-cutting | `AppLog` and its categories, and the file log's place: the person's, or a test run's own | the `LogSink`s: `FileLogSink`, `OSLogSink` (macOS) |
 | `ClaudeBar` (App) | — the composition root | SwiftUI views, themes, menu-bar label, page state, the Add Provider sheet | — |
 
 ## 3 · The dependency rules
@@ -193,6 +193,7 @@ Modules/Providers/
 │   └── Internal/
 │       ├── DefinitionFiles.swift       reads *.json from Bundle.module or a folder
 │       └── DayLedger · FileLedgerStore closed days kept in ~/.claudebar/usage-history/
+│                                         (a log's scans beside them, in scans/)
 ├── Resources/Providers/                codex.json · claude.json · claude-*.js ·
 │                                       claude-prices.json · …   — the vendors
 └── Tests/
@@ -217,7 +218,7 @@ for that thing, is `@Mockable`, and has its implementation in an `Internal/`.
 | `SecretStore` | DataSources | the Keychain, for secrets a login saved | `Storage` |
 | `LedgerStore` | Providers | `~/.claudebar/usage-history/` | `Providers/Internal` (→ `Storage`) |
 | `ProviderSettingsRepository` · `CredentialRepository` | Providers | `settings.json`, the Keychain | `Storage` |
-| `Clock` · `PowerStateProvider` | Monitoring | time, the battery | `Monitoring/Internal` |
+| `Clock` · `PowerStateProvider` | Monitoring | time, the battery | `SystemClock` in `Monitoring`; `SystemPowerStateProvider` in the Mac app (`Infrastructure/Monitoring`) |
 | `AlertDestination` | Alerting | who hears an alert: this Mac's notifications, the person's webhooks | `Alerting/Internal` |
 | `WebhookSending` | Alerting | one POST to a webhook's URL | `Alerting/Internal` |
 | `DestinationSecrets` | Alerting | a destination's secret, in the Keychain or its fallback | `Storage` |
@@ -245,8 +246,8 @@ testability" alone.
 
 ## 8 · Still to carve
 
-`Quotas`, `Diagnostics`, `DataSources`, `AWSClients`, `Providers` and
-`Leaderboard` are built. `Domain` and `Infrastructure` re-export them (`@_exported import`), so
+`Quotas`, `Diagnostics`, `DataSources`, `AWSClients`, `Providers`,
+`Leaderboard` and `Monitoring` are built. `Domain` and `Infrastructure` re-export them (`@_exported import`), so
 no call site changes while files move, and each old target is deleted once
 it is empty.
 
@@ -255,15 +256,15 @@ so a folder already names its destination:
 
 | Today | Goes to |
 |---|---|
-| `Domain/Monitoring/`, `Infrastructure/Monitoring/` | `Monitoring` |
+| `Domain/Monitoring/` (the popover's pages: `Overview`, `PopoverPage`, *When empty*, *Rest when empty*; `ObservationRenderSync`), `Infrastructure/Monitoring/` (`SystemPowerStateProvider`, the `SystemClock` convenience `init`) | stay in the Mac app for now; `QuotaMonitor` and what it needs are `Monitoring` ([#648](https://github.com/tddworks/ClaudeBar/issues/648)) |
 | `Domain/Alerting/`, `Infrastructure/Alerting/`, `App/Alerting/` (its drivers stay in the App) | `Alerting` |
 | `Domain/Activity/`, `Infrastructure/Activity/`, `App/Activity/` (views stay in the App) | `Activity` (`NSScreen+NotchMetrics` → App) |
 | `Domain/InUse/`, `Infrastructure/InUse/` | not decided: beside `InUse` in `Providers`, or a module of its own (§9) |
 | `Domain/Settings/`, `Infrastructure/Settings/` | `Storage` |
-| `Domain/App/` (page state, `StatusColorPolicy`, `MenuBarProviderSettings`, `PopoverTitle`), `Infrastructure/App/` (terminal theme import) | the App |
-| `Domain/Providers/`, `Infrastructure/Providers/` (`ClaudeGuestPassSource`) | deleted (`AccountInfo`, `UsageProbe` are unused); the guest-pass source to the App, the composition root naming its vendor |
+| `Domain/App/` (page state, `StatusColorPolicy`, `MenuBarProviderSettings`, `PopoverTitle`, `QuotaMonitor+MenuBar`), `Infrastructure/App/` (terminal theme import) | the App |
+| `Domain/Providers/`, `Infrastructure/Providers/` (`ClaudeGuestPassSource`) | deleted (`AccountInfo` is unused; `UsageProbe`, the tests' stubbed login, moved to `Monitoring`); the guest-pass source to the App, the composition root naming its vendor |
 | `Infrastructure/DataSources/` (`ShellEnvironment`, `SimpleCLIExecutor`) | `DataSources` |
-| `Tests/DomainTests`, `InfrastructureTests`, `AppTests` | split per module, following their sources' context folders; `Quotas`' are in `QuotasTests`, the leaderboard's in `LeaderboardTests` |
+| `Tests/DomainTests`, `InfrastructureTests`, `AppTests` | split per module, following their sources' context folders; `Quotas`' are in `QuotasTests`, the leaderboard's in `LeaderboardTests`, the Monitor's in `MonitoringTests` |
 
 The kernel still holds a few types that belong elsewhere; each carries a
 `- Note: Interim` naming its final shape, and the canonical model lists them
@@ -547,6 +548,45 @@ Vendor/<Library>/          pinned C and data, never hand-edited: QuickJS,
   Windows implementation fails as a `DataSourceError` naming the case and the
   platform; a capability with none is `nil`, as when a definition doesn't
   declare it.
+- **A file the modules save goes through `AtomicFile.write`**, never
+  Foundation's `.atomic` directly. Each platform defines it once, beside
+  `FileStamp`: on the Mac and Linux it is Foundation's atomic write. On
+  Windows, Foundation's opens its new file with a handle a program started
+  meanwhile inherits and that doesn't let the file be renamed, so the save
+  failed with error 32 and was lost; there, a handle no program inherits
+  writes the new file and renames it over the old one, waiting up to a second
+  for a program holding that one open ([#692](https://github.com/tddworks/ClaudeBar/issues/692)).
+- **A log folder is listed by `LogFileFinder.listing(under:)`**, each
+  platform's own, and a listed file's time is `contentModified(_:)`. On the
+  Mac and Linux both are Foundation's enumerator and resource values. On
+  Windows those open every file in the folder for reading, twice, and a log
+  the glob names three times, and the antivirus scans a file opened that way
+  unless it did lately: omp's 15,000 session files, unread for 20 minutes,
+  took one to three minutes to list. There the folders' own entries
+  (`FindFirstFileExW`) name the files, so no file is opened, and a log's time
+  comes from its own record (`GetFileAttributesExW`), not the folder's entry,
+  which NTFS leaves at its old time while a writer holds the file open ([#704](https://github.com/tddworks/ClaudeBar/issues/704)).
+- **The file log adds each line through `LogFile.append`**, Diagnostics' own,
+  since it imports nothing: the file is opened to append, made if it isn't
+  there, and no program the process starts inherits it (`O_APPEND |
+  O_CREAT | O_CLOEXEC` on the Mac and Linux; on Windows a `FILE_APPEND_DATA`
+  handle with no security attributes). It is never written whole: two of the
+  app's processes write one log (on Windows the app and its hourly upload),
+  each in its own order, so the OS puts each line at the end, and none takes
+  another's place. A new log's first line went through Foundation's atomic
+  write and was lost on Windows the way #692's saves were ([#696](https://github.com/tddworks/ClaudeBar/issues/696)).
+  Starting a new file past 5 MB (the current one becomes `.old.log`) is done
+  by one process at a time, under a lock on `<log>.lock` beside it (`flock`;
+  `LockFileEx` on Windows), and only if the file is still past its size once
+  the lock is held, so neither process throws away the `.old.log` the other
+  just made. A line older than one new file is still gone, by design: the
+  promise is that no line is lost to the two processes racing. A line that
+  can't be written goes to `NSLog`, never nowhere. Each line is written on
+  the sink's own queue, so a log call never waits on the disk; a process that
+  ends at once with `exit`, as ClaudeBar for Windows' hourly upload does after
+  its outcome, calls `AppLog.flush()` first, which returns once every line
+  logged so far is in the file. Without it the queue ends with the process,
+  its last lines unwritten.
 - **`MOCKING`** is in `Package.swift`'s `swiftSettings`, for debug builds and
   tests.
 - **The App stays a Tuist target** and depends on the package's products. Its
@@ -627,6 +667,7 @@ Modules/DataSources/Sources/
     │   │                               $SHELL -l -i, SIGTERM then kill (#579)
     │   ├── Network/MacLocalServers.swift   RunningProcesses, pgrep, lsof,
     │   │                               URLSession trusting 127.0.0.1 (#588)
+    │   ├── Files/AtomicFile+macOS.swift   Foundation's atomic write
     │   └── Process/ · Lookup/ · Network/ · Logs/   today's workers, regrouped
     │                                 under their ports in slices 3–5
     ├── Windows/               #if os(Windows), whole file: the same ports
@@ -637,14 +678,19 @@ Modules/DataSources/Sources/
     │   │                                   TerminateProcess (#579)
     │   ├── Network/WindowsLocalServers.swift   EnumProcesses, NtQueryInformationProcess,
     │   │                                   GetExtendedTcpTable, WinHTTP (#588)
-    │   └── Logs/                     FileStamp+Windows · ByteSearch+Windows
+    │   ├── Files/AtomicFile+Windows.swift   a file saved whole by one handle no
+    │   │                                   child inherits, renamed over the old (#692)
+    │   └── Logs/                     FileStamp+Windows · ByteSearch+Windows ·
+    │                                 LogFileFinder+Windows: the folders' own entries
     └── Linux/                 #if os(Linux), whole file: the same ports, as far as
         ├── Platform+Linux.swift     static let current = Platform(name: "Linux", …)
         ├── Time/LinuxTimeZone.swift     TimeZone.current; a zone with no tzdata
         │                                 file is the OS's offset, fixed
-        ├── Process/LinuxProcesses.swift  the four facts: LinuxBinaryLocator (PATH, then tool folders),
-        │                                 /bin/sh, $SHELL -l -i, SIGTERM then kill
-        └── Logs/                    FileStamp+Linux · ByteSearch+Linux
+        ├── Process/LinuxProcesses.swift  the four facts: LinuxBinaryLocator (PATH, then tool folders,
+        │                                 version managers' included, #682), /bin/sh, $SHELL -l -i,
+        │                                 SIGTERM then kill
+        ├── Files/AtomicFile+Linux.swift  Foundation's atomic write
+        └── Logs/                    FileStamp+Linux · ByteSearch+Linux · LogFileFinder+Linux
 Modules/DataSources/Tests/
 ├── Contracts/                 one suite per port, run against Platform.current's
 │                                adapter: TimeZoneContract (#567),
@@ -652,8 +698,8 @@ Modules/DataSources/Tests/
 ├── UnavailableTests.swift     the factory with Platform.bare — runs on the Mac too
 ├── …                          everything else: every OS, no skips
 └── macOS/ · Windows/ · Linux/   an adapter's own tests, under #if os(…)
-Modules/Monitoring/            QuotaMonitor's neutral core (slice 6, its own design
-                               review first)
+Modules/Monitoring/            QuotaMonitor and its loop, neutral: every OS, no
+                               platform folder (slice 6, #648)
 ```
 
 - **`Platform` is a value, and `Platform.current` is its only `#if`.** Each
@@ -737,7 +783,7 @@ Phase 5's slices, each its own issue and PR
 | 3 | **`LocalNetwork`**, with the localhost-certificate spike | its tests run on Windows — built ([#588](https://github.com/tddworks/ClaudeBar/issues/588)): a `localServer` fetch (Antigravity's `local` source) runs on Windows |
 | 4 | **`Terminal`**, with the SwiftTerm-on-Windows spike | its tests run on Windows — built ([#625](https://github.com/tddworks/ClaudeBar/pull/625)): `cli` fetches read a CLI's screen through a pseudo console, and the runner's own suites run on all three platforms |
 | 5 | **`Secrets`**: Credential Manager; browser cookies and storage stay `Unavailable` | its tests run on Windows — built ([#640](https://github.com/tddworks/ClaudeBar/issues/640)): a `keychain` lookup reads a Credential Manager item, the GitHub CLI's login included, and saves a renewed login back to an unencoded one |
-| 6 | **`Monitoring` into the package**, so no platform rewrites refresh scheduling and alert logic; the menu bar and Notify! stay in the Mac app | its own design review first, since it reshapes the domain's root |
+| 6 | **`Monitoring` into the package**, so no platform rewrites refresh scheduling and alert logic; the menu bar and Notify! stay in the Mac app | its own design review first, since it reshapes the domain's root ([#648](https://github.com/tddworks/ClaudeBar/issues/648)) — built ([#661](https://github.com/tddworks/ClaudeBar/pull/661)): `QuotaMonitor` is the `Monitoring` library, and its 108 tests in `MonitoringTests` need no platform worker, so Windows skips none; the menu bar's readouts, the popover's pages and the power source stay in the Mac app |
 
 ### Open
 

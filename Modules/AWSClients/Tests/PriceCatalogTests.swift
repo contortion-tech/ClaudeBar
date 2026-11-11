@@ -28,12 +28,75 @@ struct PriceCatalogTests {
         #expect(await SDKPriceCatalog(pricing: Prices(models: [:])).prices(service: "AmazonEC2", ids: ["x"]).isEmpty)
     }
 
-    @Test func `should price a cross-region model like its base model in the bundled price table`() throws {
-        let regional = try #require(DefaultBedrockPricing.model(for: "us.anthropic.claude-opus-4-5-20251101-v1:0"))
-        let base = try #require(DefaultBedrockPricing.model(for: "anthropic.claude-opus-4-5-20251101-v1:0"))
-        #expect(regional.inputPricePer1M == base.inputPricePer1M)
-        #expect(regional.outputPricePer1M == base.outputPricePer1M)
-        #expect(regional.inputPricePer1M > 0)
+    @Test func `should price from a price table file: rows by id, vendors named by the file`() throws {
+        let table = try DefaultBedrockPricing.Table(json: """
+        { "vendors": { "acme": "Acme Labs" },
+          "models": [ { "id": "acme.rocket-1", "name": "Rocket 1", "input": "0.30", "output": "1.20" } ] }
+        """)
+        #expect(table.model(for: "us.acme.rocket-1:0") == BedrockModel(
+            id: "us.acme.rocket-1:0", displayName: "Rocket 1", vendor: "Acme Labs",
+            inputPricePer1M: Decimal(string: "0.30")!, outputPricePer1M: Decimal(string: "1.20")!))
+        #expect(table.model(for: "acme.rocket-2") == nil)
+        #expect(table.vendor(of: "global.acme.rocket-2") == "Acme Labs")
+        #expect(table.vendor(of: "zeta.comet-1") == "Zeta")
+        #expect(throws: (any Error).self) { try DefaultBedrockPricing.Table(json: #"{ "models": [ { "id": "x" } ] }"#) }
+    }
+
+    @Test(arguments: ["global", "us", "eu", "jp", "apac", "au"])
+    func `should price an inference profile like its base model in the bundled price table`(_ profile: String) throws {
+        let routed = try #require(DefaultBedrockPricing.model(for: "\(profile).anthropic.claude-opus-4-5-20251101-v1:0"))
+        #expect(routed.id == "\(profile).anthropic.claude-opus-4-5-20251101-v1:0")
+        #expect(routed.displayName == "Claude Opus 4.5")
+        #expect(routed.inputPricePer1M == 5)
+        #expect(routed.outputPricePer1M == 25)
+    }
+
+    @Test(arguments: [
+        ("anthropic.claude-fable-5-1", "Claude Fable 5.1", "10", "50"),
+        ("anthropic.claude-fable-5", "Claude Fable 5", "10", "50"),
+        ("anthropic.claude-opus-5-5", "Claude Opus 5.5", "4", "20"),
+        ("anthropic.claude-opus-5", "Claude Opus 5", "5", "25"),
+        ("anthropic.claude-sonnet-5-5", "Claude Sonnet 5.5", "2", "10"),
+        ("anthropic.claude-sonnet-5", "Claude Sonnet 5", "2", "10"),
+        ("anthropic.claude-haiku-5-5", "Claude Haiku 5.5", "0.10", "0.50"),
+        ("anthropic.claude-opus-4-8", "Claude Opus 4.8", "5", "25"),
+        ("anthropic.claude-opus-4-7", "Claude Opus 4.7", "5", "25"),
+        ("anthropic.claude-opus-4-6-v1", "Claude Opus 4.6", "5", "25"),
+        ("anthropic.claude-sonnet-4-6", "Claude Sonnet 4.6", "3", "15"),
+        ("anthropic.claude-mythos-5-1", "Claude Mythos 5.1", "10", "50"),
+        ("anthropic.claude-sonnet-4-5-20250929-v1:0", "Claude Sonnet 4.5", "3", "15"),
+        ("anthropic.claude-opus-4-5-20251101-v1:0", "Claude Opus 4.5", "5", "25"),
+        ("anthropic.claude-haiku-4-5-20251001-v1:0", "Claude Haiku 4.5", "1", "5"),
+        ("anthropic.claude-sonnet-4-20250514-v1:0", "Claude Sonnet 4", "3", "15"),
+    ])
+    func `should price Claude at Bedrock's global prices when the price list can't answer`(
+        _ id: String, _ name: String, _ input: String, _ output: String) throws {
+        for modelId in [id, "global.\(id)"] {
+            let model = try #require(DefaultBedrockPricing.model(for: modelId))
+            #expect(model.displayName == name)
+            #expect(model.vendor == "Anthropic")
+            #expect(model.inputPricePer1M == Decimal(string: input)!)
+            #expect(model.outputPricePer1M == Decimal(string: output)!)
+        }
+    }
+
+    /// AWS lists no global price for these: their on-demand regional price.
+    @Test(arguments: [
+        ("anthropic.claude-mythos-5", "Claude Mythos 5", "11", "55"),
+        ("anthropic.claude-mythos-preview", "Claude Mythos Preview", "27.50", "137.50"),
+        ("anthropic.claude-opus-4-1-20250805-v1:0", "Claude Opus 4.1", "15", "75"),
+        ("anthropic.claude-opus-4-20250514-v1:0", "Claude Opus 4", "15", "75"),
+        ("anthropic.claude-3-7-sonnet-20250219-v1:0", "Claude 3.7 Sonnet", "3", "15"),
+    ])
+    func `should price a Claude model with no global price at Bedrock's regional on-demand price`(
+        _ id: String, _ name: String, _ input: String, _ output: String) throws {
+        for modelId in [id, "us.\(id)"] {
+            let model = try #require(DefaultBedrockPricing.model(for: modelId))
+            #expect(model.displayName == name)
+            #expect(model.vendor == "Anthropic")
+            #expect(model.inputPricePer1M == Decimal(string: input)!)
+            #expect(model.outputPricePer1M == Decimal(string: output)!)
+        }
     }
 }
 

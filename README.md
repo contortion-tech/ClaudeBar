@@ -59,6 +59,8 @@ Or download the signed and notarized DMG from [Releases](https://github.com/tddw
 | JetBrains AI | Monthly AI credits from your IDE | [docs](docs/providers/jetbrains/README.md) |
 | OpenAI API | Organization spend over the last 30 days, per line item | [docs](docs/providers/openai/README.md) |
 | Cloudflare AI | Workers AI neurons against 10k a day, Workers AI and AI Gateway tokens, the Workers Paid overage and the last invoice | [docs](docs/providers/cloudflare-ai/README.md) |
+| Runcrate | Credit balance in dollars | [docs](docs/providers/runcrate/README.md) |
+| UberLLM | Prepaid balance in dollars, less what running requests hold | [docs](docs/providers/uberllm/README.md) |
 | Your own | Anything a script can print, via `~/.claudebar/extensions/` | [docs](docs/features/providers/extensions/README.md) |
 
 ## What It Covers
@@ -178,6 +180,7 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
       <td align="center" valign="top" width="16.66%"><a href="https://jniimilab.ai/"><img src="https://avatars.githubusercontent.com/u/54612149?v=4?s=80" width="80px;" alt="Junichiro Niimi"/><br /><sub><b>Junichiro Niimi</b></sub></a><br /><a href="https://github.com/tddworks/claudebar/commits?author=jniimi" title="Code">💻</a></td>
       <td align="center" valign="top" width="16.66%"><a href="https://github.com/shaihi"><img src="https://avatars.githubusercontent.com/u/1818884?v=4?s=80" width="80px;" alt="shaihi"/><br /><sub><b>shaihi</b></sub></a><br /><a href="https://github.com/tddworks/claudebar/commits?author=shaihi" title="Code">💻</a></td>
       <td align="center" valign="top" width="16.66%"><a href="https://github.com/heydryft"><img src="https://avatars.githubusercontent.com/u/48842933?v=4?s=80" width="80px;" alt="Nirupam Bhowmick"/><br /><sub><b>Nirupam Bhowmick</b></sub></a><br /><a href="https://github.com/tddworks/claudebar/commits?author=heydryft" title="Code">💻</a></td>
+      <td align="center" valign="top" width="16.66%"><a href="https://psa.team/"><img src="https://avatars.githubusercontent.com/u/155616440?v=4?s=80" width="80px;" alt="Penguin Secret Agency"/><br /><sub><b>Penguin Secret Agency</b></sub></a><br /><a href="https://github.com/tddworks/claudebar/commits?author=PSA-Team-source" title="Code">💻</a></td>
     </tr>
   </tbody>
   <tfoot>

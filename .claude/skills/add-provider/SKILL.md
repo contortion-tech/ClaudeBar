@@ -72,7 +72,7 @@ the user to confirm before writing code.
   "cli": "acme",                        // optional
   "enabledByDefault": true,
   "order": 280,                         // its default place in the lineup; none → after the rest, by name
-  "guestPasses": {},                    // optional: a capability the engine runs (Claude's)
+  "guestPasses": { "plans": ["claudeMax"] },  // optional: a capability the engine runs (Claude's), for the plans named
   "defaultDataSource": "api",
   "dataSources": [
     {
@@ -169,11 +169,14 @@ where they are read: a path list (`["{{account.folder}}/.claude.json",
 
 ```jsonc
 "json": {
-  "plan":  { "path": "$credential.plan", "plans": { "max": "claudeMax" } },   // or "badges"
+  "plan":  { "path": "$credential.plan", "plans": { "max": "claudeMax" } },   // or "badges"; a list = the first
+                                                // rule whose "when" holds and that answers
   "email": ["$.account.email", "$credential.email"],
   "quotas": [
     { "kind": "session", "at": "$.five_hour", "usedPercent": "utilization",
-      "resetsAt": { "iso8601": "resets_at" } },               // or epochSeconds / secondsFromNow
+      "resetsAt": { "iso8601": "resets_at" },                // or epochSeconds / secondsFromNow
+      "window": [{ "seconds": "window_seconds" }, { "hours": 5 }],    // kindByWindow reads this length
+      "kindByWindow": [{ "atLeast": { "days": 7 }, "kind": "weekly" }] },  // named by its length, not its place
     { "kind": "model", "each": "$.limits", "where": { "path": "kind", "equals": "weekly" },
       "name": { "firstOf": ["model.name"], "firstWord": true, "lowercase": true },
       "usedPercent": "percent", "unique": true, "overLimit": true, "countdown": "hours",
@@ -181,6 +184,9 @@ where they are read: a path list (`["{{account.folder}}/.claude.json",
     { "kind": "time", "name": "Credits",                             // money, not a percentage:
       "left": { "money": "$.data.remaining", "of": "$.data.limit", "currency": "USD" } }  // no "of" = a balance
   ],
+  "notes": [{ "label": "Usage limit resets", "value": "$.resets.count", "unit": "available" },  // a count, not a limit
+    { "label": "Credits", "when": { "path": "$.credits.unlimited", "equals": true }, "text": "Unlimited" },  // one note per label:
+    { "label": "Credits", "value": "$.credits.balance", "unit": "credits", "round": 0 }],                  // the first that answers
   "cost": [                                                    // the first shape that answers
     { "kind": "extraUsage", "when": { "path": "$.spend.enabled", "equals": true },
       "used":  { "amount": "$.spend.used.amount_minor", "decimals": "$.spend.used.exponent" },
@@ -291,7 +297,7 @@ still wins. `DetectionTests` lists the built-ins in order — add your id there.
 
 Every provider gets the same `Engine`: settings, the vault, the login shell (for
 a lookup with `"loginShell": true`), the cloud ports (for a `cloudWatch` fetch),
-the guest-passes runner (for `"guestPasses": {}`). Ask for one in the JSON;
+the guest-passes runner (for `"guestPasses": { "plans": [...] }`). Ask for one in the JSON;
 never pass one in Swift.
 
 Its name, symbol and colours are `profile.look` in the JSON — no `switch id`

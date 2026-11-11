@@ -5,11 +5,14 @@ import Providers
 @testable import DataSources
 import Quotas
 
-/// Kiro as data: `kiro-cli` given `/usage` on stdin, read by `kiro-usage.js`
-/// — the old probe's screens, with each added account in its own home.
+/// Kiro as data: the v3 engine's `_kiro/account/getUsage` over `kiro-cli acp`,
+/// falling back to `kiro-cli` given `/usage` on stdin, both read by
+/// `kiro-usage.js` — with each added account in its own home.
 @MainActor @Suite("Kiro definition")
 struct KiroDefinitionTests {
-    private func make(_ output: String, located: Bool = true, workHome: String? = nil, now: Date = Date()) throws -> Provider {
+    /// `rpc` is what `kiro-cli acp` answers, one line per request; `nil` is a
+    /// kiro-cli with no v3 engine, whose `acp` answers nothing.
+    private func make(_ output: String, rpc: [String]? = nil, located: Bool = true, workHome: String? = nil, now: Date = Date()) throws -> Provider {
         let definition = try ProviderFactory.builtIn("kiro")
         let cli = MockCLIExecutor()
         given(cli).locate(.any).willReturn(located ? "/usr/local/bin/kiro-cli" : nil)
@@ -28,7 +31,7 @@ struct KiroDefinitionTests {
         var platform = Platform.current
         platform.timeZone = Zones.losAngeles
         platform.runCLI = { _ in cli }
-        platform.processes = Processes.running { @Sendable environment in
+        platform.processes = Processes.running({ @Sendable environment in
             if let home = environment.set["HOME"] {
                 #expect(home == workHome)
                 #expect(environment.set["KIRO_HOME"] == home + "/.kiro")
@@ -37,7 +40,19 @@ struct KiroDefinitionTests {
                 return work
             }
             return cli
-        }
+        }, talking: { @Sendable _, args, _, _ in
+            #expect(args == ["acp", "--agent-engine", "v3"])
+            let transport = MockRPCTransport()
+            let received = Counter()
+            given(transport).send(.any).willReturn(())
+            given(transport).close().willReturn(())
+            given(transport).receive().willProduce { @Sendable in
+                let index = received.next() - 1
+                guard let rpc, index < rpc.count else { throw UsageError.executionFailed("kiro-cli acp ended") }
+                return Data(rpc[index].utf8)
+            }
+            return transport
+        })
         platform.keychain = StubKeychain { _, _ in nil }
         platform.browserCookies = nil
         platform.browserStorage = nil
@@ -48,6 +63,67 @@ struct KiroDefinitionTests {
         }, paths: DiskPaths())
     }
     private func parse(_ output: String) async throws -> UsageSnapshot { try await make(output).refreshPlain() }
+
+    private static let initialized = #"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}"#
+
+    @Test
+    func `should show the monthly and bonus credits the v3 engine reports over acp`() async throws {
+        let calendar = Zones.losAngelesCalendar
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 11, day: 1, hour: 12)))
+        let usage = #"{"jsonrpc":"2.0","id":2,"result":{"success":true,"data":{"planName":"KIRO PRO MAX","billingCycleReset":"2026-12-01","usageBreakdowns":[{"resourceType":"CREDIT","displayName":"Credits","used":338.62,"limit":5000,"percentage":6,"hasLimit":true}],"bonusCredits":[{"name":"Welcome","used":125,"total":500,"daysUntilExpiry":29}],"addOnCredits":[]}}}"#
+        let provider = try make("", rpc: [Self.initialized, usage], now: now)
+
+        let snapshot = try await provider.refreshPlain()
+
+        #expect(provider.defaultAccount.answeredBy == "rpc")
+        let monthly = try #require(snapshot.quota(for: .timeLimit("Monthly")))
+        #expect(abs(monthly.percentRemaining - 93.2276) < 0.001)
+        #expect(monthly.resetText == "Resets on 12/01")
+        #expect(monthly.resetsAt == calendar.date(from: DateComponents(year: 2026, month: 12, day: 1)))
+        let bonus = try #require(snapshot.quota(for: .timeLimit("Bonus credits")))
+        #expect(bonus.percentRemaining == 75)
+        #expect(bonus.resetText == "Expires in 29 days")
+    }
+
+    @Test
+    func `should show each bonus grant on its own card when the v3 engine reports more than one`() async throws {
+        let usage = #"{"jsonrpc":"2.0","id":2,"result":{"success":true,"data":{"usageBreakdowns":[],"bonusCredits":[{"name":"Welcome","used":125,"total":500,"daysUntilExpiry":29},{"name":"Referral","used":50,"total":100,"daysUntilExpiry":10},{"used":0,"total":200}]}}}"#
+        let snapshot = try await make("", rpc: [Self.initialized, usage]).refreshPlain()
+
+        #expect(snapshot.quotas.count == 3)
+        #expect(snapshot.quota(for: .timeLimit("Bonus credits: Welcome"))?.percentRemaining == 75)
+        #expect(snapshot.quota(for: .timeLimit("Bonus credits: Referral"))?.percentRemaining == 50)
+        #expect(snapshot.quota(for: .timeLimit("Bonus credits 3"))?.percentRemaining == 100)
+    }
+
+    @Test
+    func `should keep the plain bonus name when the other grants have no credits`() async throws {
+        let usage = #"{"jsonrpc":"2.0","id":2,"result":{"success":true,"data":{"usageBreakdowns":[],"bonusCredits":[{"name":"Welcome","used":125,"total":500},{"name":"Spent","used":0,"total":0}]}}}"#
+        let snapshot = try await make("", rpc: [Self.initialized, usage]).refreshPlain()
+
+        #expect(snapshot.quotas.count == 1)
+        #expect(snapshot.quota(for: .timeLimit("Bonus credits"))?.percentRemaining == 75)
+    }
+
+    @Test
+    func `should read the usage screen when kiro-cli has no v3 engine to ask`() async throws {
+        let provider = try make("Estimated Usage | resets on 2026-12-01 | KIRO PRO MAX\nCredits (250 of 5000 covered in plan), 5.0%")
+
+        let snapshot = try await provider.refreshPlain()
+
+        #expect(provider.defaultAccount.answeredBy == "cli")
+        #expect(snapshot.quota(for: .timeLimit("Monthly"))?.percentRemaining == 95)
+        #expect(snapshot.quota(for: .timeLimit("Monthly"))?.resetText == "Resets on 12/01")
+    }
+
+    @Test
+    func `should read the usage screen when the v3 engine answers with no usage`() async throws {
+        let empty = #"{"jsonrpc":"2.0","id":2,"result":{"success":true,"data":{"usageBreakdowns":[],"bonusCredits":[]}}}"#
+        let provider = try make("Credits (10 of 50 covered in plan)", rpc: [Self.initialized, empty])
+
+        #expect(try await provider.refreshPlain().quotas.first?.percentRemaining == 80)
+        #expect(provider.defaultAccount.answeredBy == "cli")
+    }
 
     
     @Test
@@ -196,6 +272,32 @@ struct KiroDefinitionTests {
         let account = product.defaultAccount
         #expect(!(await product.isAvailable(account)))
         await #expect(throws: UsageError.cliNotFound("kiro-cli")) { try await product.refresh(account) }
+    }
+
+    @Test func `should read the reset day Kiro writes out in full`() async throws {
+        let calendar = Zones.losAngelesCalendar
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 31, hour: 13)))
+        let snapshot = try await make("""
+        Estimated Usage | resets on 2026-11-01 | KIRO POWER
+        Credits (10000.00 of 10000 covered in plan), 100.0%
+        """, now: now).refreshPlain()
+        let reset = try #require(calendar.date(from: DateComponents(year: 2026, month: 11, day: 1)))
+        let monthBefore = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 1)))
+        let monthly = snapshot.quota(for: .timeLimit("Monthly"))
+        #expect(monthly?.resetsAt == reset)
+        #expect(monthly?.resetText == "Resets on 11/01")
+        #expect(monthly?.windowDuration == reset.timeIntervalSince(monthBefore))
+    }
+
+    @Test func `should start the month on the last day of a shorter month when Kiro resets on the 31st`() async throws {
+        let calendar = Zones.losAngelesCalendar
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 20, hour: 12)))
+        let snapshot = try await make("Credits (10 of 50 covered in plan) resets on 2026-03-31", now: now).refreshPlain()
+        let reset = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 31)))
+        let monthBefore = try #require(calendar.date(from: DateComponents(year: 2026, month: 2, day: 28)))
+        let monthly = snapshot.quota(for: .timeLimit("Monthly"))
+        #expect(monthly?.resetsAt == reset)
+        #expect(monthly?.windowDuration == reset.timeIntervalSince(monthBefore))
     }
 
     @Test func `should expire bonus credits in 29 days and reset the monthly credits next year when today is the reset day`() async throws {

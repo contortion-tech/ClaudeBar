@@ -36,14 +36,21 @@ struct JSONMapper: Reading {
         // Nothing answering is not a failure unless `whenEmpty` says so: a
         // provider that has no usage yet reports none (*No usage data*).
         let cost = mapping.cost.lazy.compactMap { self.cost(for: $0, in: scope, providerId: providerId) }.first
+        var noted = Set<String>()
+        let notes = mapping.notes.compactMap { rule -> ExtensionMetric? in
+            guard !noted.contains(rule.label), let text = noteText(rule, in: scope) else { return nil }
+            noted.insert(rule.label)
+            return ExtensionMetric(label: rule.label, value: text, unit: rule.unit)
+        }
 
         return UsageSnapshot(
             providerId: providerId,
             quotas: quotas,
             capturedAt: now(),
             accountEmail: mapping.email.lazy.compactMap { scope.string($0) }.first { !$0.isEmpty },
-            accountTier: mapping.plan.flatMap { plan(for: $0, in: scope) },
-            costUsage: cost
+            accountTier: mapping.plan.lazy.compactMap { plan(for: $0, in: scope) }.first,
+            costUsage: cost,
+            extensionMetrics: notes.isEmpty ? nil : notes
         )
     }
 
@@ -96,7 +103,7 @@ struct JSONMapper: Reading {
         let resetsAt = rule.resetsAt.lazy.compactMap { self.date($0, in: scope) }.first
         let windowDuration = windowLength(rule, in: scope)
 
-        guard let type = Self.quotaType(rule.kind, name: name) else { return nil }
+        guard let type = Self.quotaType(kind(rule, window: windowDuration), name: name) else { return nil }
         return UsageQuota(
             percentRemaining: left,
             quotaType: type,
@@ -116,7 +123,8 @@ struct JSONMapper: Reading {
 
     /// Money left — of a ceiling, or a balance with no percentage at all.
     private func moneyQuota(_ rule: QuotaRule.MoneyLeft, for quotaRule: QuotaRule, named name: String?, in scope: JSONScope, providerId: String) -> UsageQuota? {
-        guard let type = Self.quotaType(quotaRule.kind, name: name),
+        let windowDuration = windowLength(quotaRule, in: scope)
+        guard let type = Self.quotaType(kind(quotaRule, window: windowDuration), name: name),
               let remaining = money(rule.money, in: scope) else { return nil }
         let currency = rule.currency ?? "USD"
         var ceiling: Money?
@@ -131,7 +139,7 @@ struct JSONMapper: Reading {
             providerId: providerId,
             resetsAt: resetsAt,
             resetText: quotaRule.resetText ?? resetsAt.flatMap { countdown(quotaRule.countdown, until: $0) },
-            windowDuration: windowLength(quotaRule, in: scope)
+            windowDuration: windowDuration
         )
     }
 
@@ -143,6 +151,48 @@ struct JSONMapper: Reading {
             case .fixed(let seconds): seconds
             }
         }.first
+    }
+
+    /// The kind the window's length says, when the rule lets it; otherwise the
+    /// rule's own.
+    private func kind(_ rule: QuotaRule, window: TimeInterval?) -> QuotaKind {
+        guard let window else { return rule.kind }
+        return rule.kindByWindow.last { window >= $0.atLeast }?.kind ?? rule.kind
+    }
+
+    /// What a note shows: the definition's words, or the first value that
+    /// answers — `nil` while its condition doesn't hold.
+    private func noteText(_ rule: NoteRule, in scope: JSONScope) -> String? {
+        if let condition = rule.when, !Self.holds(condition, in: scope) { return nil }
+        if let text = rule.text { return text }
+        if let places = rule.round {
+            return rule.value.lazy.compactMap { scope.number($0) }.first.map { Self.number($0, places: places) }
+        }
+        return rule.value.lazy.compactMap { Self.noteText(scope.value($0)) }.first
+    }
+
+    /// A note's text: words as sent, or a number — never a flag.
+    static func noteText(_ value: Any?) -> String? {
+        switch value {
+        case let text as String: text.isEmpty ? nil : text
+        case let number as NSNumber where !number.isBoolean: number.stringValue
+        default: nil
+        }
+    }
+
+    /// `62500` → `62,500`; at most `places` decimals, none that are zero.
+    static func number(_ value: Double, places: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.usesGroupingSeparator = true
+        formatter.groupingSeparator = ","
+        formatter.decimalSeparator = "."
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = places
+        formatter.roundingMode = .halfUp
+        let text = formatter.string(from: NSNumber(value: value)) ?? String(value)
+        return text == "-0" ? "0" : text
     }
 
     static func quotaType(_ kind: QuotaKind, name: String?) -> QuotaType? {
@@ -215,6 +265,7 @@ struct JSONMapper: Reading {
     }
 
     private func plan(for rule: PlanRule, in scope: JSONScope) -> AccountTier? {
+        if let condition = rule.when, !Self.holds(condition, in: scope) { return nil }
         guard let value = scope.string(rule.path), !value.isEmpty else { return nil }
         if !rule.plans.isEmpty {
             return ScriptOutput.tier(rule.plans[value.lowercased()] ?? value)

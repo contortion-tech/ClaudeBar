@@ -4,10 +4,11 @@ import Mockable
 
 extension Processes {
     /// Programs each run on what `runner` answers for its environment, found
-    /// as that runner finds them, a conversation that answers nothing, and a
-    /// script started as the file itself, whatever the OS.
-    static func running(_ runner: @escaping Processes.Pipes) -> Processes {
-        Processes(FixtureOS()).with(pipes: runner, conversation: { _, _, _, _ in MockRPCTransport() })
+    /// as that runner finds them, a conversation that answers nothing unless
+    /// one is handed in, and a script started as the file itself, whatever the OS.
+    static func running(_ runner: @escaping Processes.Pipes,
+                        talking conversation: @escaping DataSources.TransportFactory = { _, _, _, _ in MockRPCTransport() }) -> Processes {
+        Processes(FixtureOS()).with(pipes: runner, conversation: conversation)
     }
 }
 

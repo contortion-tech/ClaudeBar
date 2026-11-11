@@ -4,7 +4,7 @@ description: Track Claude 5-hour session, weekly and per-model (Opus, Sonnet, Fa
 
 # Claude
 
-Shows your Claude Code 5-hour session and weekly limits, any model-specific weekly limits (Opus, Sonnet, Fable), Extra Usage spend when it's turned on, and today's cost and tokens from your local session logs. Pay-as-you-go API accounts get a cost card instead of quota bars.
+Shows your Claude Code 5-hour session and weekly limits, any model-specific weekly limits (Opus, Sonnet, Fable), Extra Usage spend when it's turned on, and today's cost and tokens from your local session logs. Pay-as-you-go API accounts get a cost card instead of quota bars. The badge names your plan: PRO, MAX, ULTRA (the plan that used to be Max 20x), TEAM or ENTERPRISE.
 
 ## Setup
 
@@ -39,13 +39,15 @@ A shell alias or function (`alias c=…`) can't be used: ClaudeBar starts a prog
 - **Slow SessionStart hooks can make Claude look unavailable.** ClaudeBar runs `claude /usage` and waits up to 20 seconds for the Usage screen. It opens only after Claude Code has finished its own startup, so hooks that take longer than that (or a very busy machine) make the CLI time out even though you're working in Claude fine. ClaudeBar then falls back to the usage API, so you only see "Claude Unavailable" if that fails too. Run `claude` in a terminal and watch for `(running SessionStart hooks… N/M)`; if that counter is still climbing after ~15 seconds, that is the cause. Speeding up or trimming those hooks fixes it, and the API data source skips the CLI entirely.
 - **API mode refreshes at most every 15 minutes.** Anthropic throttles its usage endpoint hard (after a 429 it can refuse requests for up to an hour), so results are cached for 15 minutes and background refresh can't go faster than that. After a 429, ClaudeBar waits for the `Retry-After` time (5 minutes if none is given) and shows "Rate limited. Retrying …".
 - **"Claude usage data did not finish loading".** `/usage` shows a loading placeholder before its quota bars arrive. If it never gets past that, the usage endpoint is probably rate limited. Wait a moment, or switch modes.
+- **"Per-model breakdown unavailable (rate limited …)" on `/usage`** throttles only the breakdown under the contributing-usage heading ("What's contributing to your usage?" in Claude Code 2.1.316, "What's contributing to your limits usage?" in 2.1.289). ClaudeBar still shows the bars above it. "Rate limited - too many requests" from the CLI means the bars themselves didn't load, or the CLI reported a rate limit outside that section; ClaudeBar then tries the usage API.
 - **Max or Pro billed through Apple showing "The Claude CLI did not see this account's subscription".** On some subscriptions `/usage` reports API billing instead of a plan — either the cost panel on its own, or "only available for subscription plans". ClaudeBar sees from `~/.claude.json` that you have a subscription, so it tries the API rather than showing $0.00. If the API also fails, run `claude login` again or switch to API mode.
 - **"Authentication required" when you're already signed in** usually means the Keychain read failed. The log records the `security` exit status. See [troubleshooting](../../troubleshooting.md).
 - **Account email and organization come from `~/.claude.json`**, because Claude CLI v2.1.79+ no longer shows them on the Usage tab.
 - **More than one Claude login?** Use **Accounts → Add Account** in the provider settings to sign in with your browser or choose a `CLAUDE_CONFIG_DIR` folder. See [multiple accounts](../../features/providers/multi-account/README.md). Each account shows its own today's cost and 30-day chart, read from its own folder's logs; guest passes stay with your usual login.
 - **Daily cost and token cards** read `~/.claude/projects/*/*.jsonl`. They're only calculated when the popover is open, not during background refreshes.
 - **Claude Desktop's tokens** appear as their own **Claude Desktop · Token Usage** card on your usual login, read from Desktop's app-data folder: `~/Library/Application Support/Claude/buddy-tokens.json` on macOS, `%APPDATA%\Claude\buddy-tokens.json` on Windows (or `~/AppData/Roaming/Claude/buddy-tokens.json` if `APPDATA` is empty or unset). It counts Desktop on this computer only, shows no cost, and doesn't change your limits or the menu bar. Your session and weekly limits still need Claude Code: without it, Claude says so in a card with a *Set up Claude Code* button, with the Desktop card below it.
-- **Share Claude Code** (guest passes) only appears for Max accounts.
+- **No session bar on Ultra.** A verified Ultra account has no 5-hour limit, so Claude shows only the weekly and model limits, and so does ClaudeBar. An Ultra account Anthropic hasn't verified yet still has a temporary session limit, and ClaudeBar shows it.
+- **Share Claude Code** (guest passes) only appears for Max and Ultra accounts.
 - **Claude API Budget** in the same pane only applies to pay-as-you-go API accounts, not to Max or Pro Extra Usage.
 
 ## See also

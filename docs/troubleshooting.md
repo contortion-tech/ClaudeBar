@@ -15,10 +15,11 @@ ClaudeBar writes everything at info level and above to:
 ```
 
 - **Open it**: Settings → **Logs** → **Open Log File** opens it in TextEdit. Attach it to bug reports.
-- **Rotation**: when the file passes 5 MB it's renamed to `ClaudeBar.old.log`, replacing any older one, and a new file starts. So you have at most about 10 MB of history.
+- **Rotation**: when the file passes 5 MB it's renamed to `ClaudeBar.old.log`, replacing any older one, and a new file starts. So you have at most about 10 MB of history. The empty `ClaudeBar.log.lock` beside it lets ClaudeBar's processes take turns starting the new file.
 - **Line format**: `[2026-09-24T09:15:02.123Z] [INFO] [probes] claude: every data source failed; reporting Authentication required. Please log in.`, with the timestamp in UTC.
 - **Levels**: `INFO`, `WARNING` and `ERROR`. Debug messages go only to the unified log (below).
 - **No secrets**: tokens and API keys are never logged. Check before posting a log anyway, since it contains paths and project names.
+- **Test runs**: `swift test` and `xcodebuild test` write to a file of their own, `ClaudeBar-test-log-<run>/ClaudeBar.log` in the temporary folder (`$TMPDIR`, or `%TEMP%` on Windows; only you can read it), so this file holds only what the app and its helpers did.
 
 ```bash
 tail -f ~/Library/Logs/ClaudeBar/ClaudeBar.log         # follow live
@@ -89,7 +90,8 @@ Every provider runs on the same engine, so its log lines have the same shape: `<
 | `<login> <source>: HTTP 401, refreshing the token once` / `Token refresh refused (HTTP 400, …)` | The token was refused; a refused refresh means signing in again |
 | `<login> <source>: the credential changed on disk; using the new one` | The provider's own CLI renewed its login meanwhile. Fine |
 | `Running <cli> to renew its login` / `<cli> isn't installed, so its login can't be renewed` | A login the CLI owns (Gemini) is being renewed by running it |
-| `'<cli>' not found in PATH` / `<cli> exited with <code>` / `<cli> could not start` | The provider's CLI isn't installed where ClaudeBar looks, failed, or couldn't run. Set its location in the provider's settings |
+| `'<cli>' not found in PATH` / `<cli> exited with <code>` / `<cli> could not start` | The provider's CLI isn't installed where ClaudeBar looks, failed, or couldn't run. Set its location in the provider's settings. A missing CLI is noted once, not at every refresh, and again after it was found and went missing |
+| `Keychain item '<service>' couldn't be read: security exited with <code>` / `Credential Manager read failed with error <code>` | The secret store refused an item that may be there (a denied prompt, a locked keychain). An item that isn't there is no error: the next place in the lookup is tried |
 | `<login> screen reports: <phrase>` | A CLI's screen showed an error phrase (logged out, an update notice) |
 | `<login> mapping script '<file>' threw: …` | The response changed shape. Report it with the log |
 | `<app> isn't running` / `<app> is running without its <value>` | A local app (Antigravity) isn't running, or started without what its server needs |

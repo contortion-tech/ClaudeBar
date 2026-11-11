@@ -243,6 +243,64 @@ struct DataSourceTests {
         await #expect(throws: (any Error).self) { try await refresh.value }
     }
 
+    @Test
+    func `should read a JSON-RPC CLI that first answers after its timeout when the host allows it time to start (#685)`() async throws {
+        // A CLI read from a cold disk in WSL: its app-server answers the
+        // handshake only after the definition's timeout. The time to start is
+        // a ceiling, never a wait, as a terminal test's `PlatformTerminal.deadline`
+        // is: the suite runs its tests at once, and on the Windows runner one
+        // that only computes took 21 s from its start to its end (#686).
+        let definition = try decode("""
+        {"kind":"rpc","fetch":{"jsonRpc":{"cli":"codex","args":["app-server"],"call":"read","timeout":0.2,
+           "handshake":[{"request":"initialize"},{"notify":"initialized"}]}},
+         "mapping":{"json":{"quotas":[{"kind":"weekly","usedPercent":"$.result.used"}]}}}
+        """)
+        let source = DataSources.make(
+            definition,
+            providerId: "test",
+            cliExecutor: installed(),
+            network: MockNetworkClient(),
+            makeTransport: { _, _, _, _ in StartingRPCTransport(start: .seconds(2)) },
+            environment: { _ in nil },
+            homeDirectory: FileManager.default.temporaryDirectory,
+            now: { Date() }
+        )
+
+        let usage = try await FetchContext.$startAllowance.withValue(60) { try await source.fetchUsage() }
+
+        #expect(usage.quota(for: .weekly)?.percentRemaining == 60)
+    }
+
+    @Test
+    func `should give up on a JSON-RPC CLI that stops answering once it started, at its timeout, however long it may take to start`() async throws {
+        // It answered the handshake, then stalled (#517): the time to start
+        // was spent then, so the refresh ends at the timeout, not 120 s later.
+        // Under a minute is that on a loaded runner too (#686); the instant
+        // it ends, the first answer plus the timeout, is `JSONRPCDeadlineTests`'.
+        let definition = try decode("""
+        {"kind":"rpc","fetch":{"jsonRpc":{"cli":"codex","args":["app-server"],"call":"read","timeout":0.3,
+           "handshake":[{"request":"initialize"},{"notify":"initialized"}]}},
+         "mapping":{"json":{"quotas":[]}}}
+        """)
+        let source = DataSources.make(
+            definition,
+            providerId: "test",
+            cliExecutor: installed(),
+            network: MockNetworkClient(),
+            makeTransport: { _, _, _, _ in StartingRPCTransport(start: .zero, answers: 1) },
+            environment: { _ in nil },
+            homeDirectory: FileManager.default.temporaryDirectory,
+            now: { Date() }
+        )
+        let clock = ContinuousClock()
+        let started = clock.now
+
+        await #expect(throws: DataSourceError(.fetch, .timeout)) {
+            try await FetchContext.$startAllowance.withValue(120) { try await source.fetchUsage() }
+        }
+        #expect(clock.now - started < .seconds(60))
+    }
+
     @Test(arguments: [
         ("codex account authentication required to read rate limits", UsageError.authenticationRequired),
         ("rate limits are unavailable", UsageError.executionFailed("RPC error: rate limits are unavailable")),
@@ -271,6 +329,41 @@ struct DataSourceTests {
         )
 
         await #expect(throws: DataSourceError(.fetch, expected)) { try await source.fetchUsage() }
+    }
+
+    @Test
+    func `should ask to sign in when a JSON-RPC CLI answers that it is signed out, even when the app's threads were busy past its timeout as it started the CLI (#698)`() async throws {
+        // Every thread taken right after the CLI starts, for longer than its
+        // timeout: the CLI is asked only then, and answers at once. On the
+        // Windows runner, the suite's tests waited that long for a thread.
+        let thread = BusyThread()
+        let transport = MockRPCTransport()
+        given(transport).send(.any).willReturn(())
+        given(transport).close().willReturn(())
+        given(transport).receive()
+            .willReturn(Data(#"{"id":1,"error":{"code":-32600,"message":"codex account authentication required to read rate limits"}}"#.utf8))
+        let definition = try decode("""
+        {"kind":"rpc","fetch":{"jsonRpc":{"cli":"codex","call":"read","timeout":0.2,
+           "errors":[{"contains":["authentication required"],"error":"authenticationRequired"}]}},
+         "mapping":{"json":{"quotas":[]}}}
+        """)
+        let source = DataSources.make(
+            definition,
+            providerId: "test",
+            cliExecutor: installed(),
+            network: MockNetworkClient(),
+            makeTransport: { _, _, _, _ in
+                thread.hold(for: 0.5)
+                return transport
+            },
+            environment: { _ in nil },
+            homeDirectory: FileManager.default.temporaryDirectory,
+            now: { Date() }
+        )
+
+        await withTaskExecutorPreference(thread) {
+            await #expect(throws: DataSourceError(.fetch, .authenticationRequired)) { try await source.fetchUsage() }
+        }
     }
 
     @Test
@@ -330,5 +423,52 @@ private final class SilentRPCTransport: RPCTransport, @unchecked Sendable {
         waiting = []
         lock.unlock()
         resumed.forEach { $0.resume() }
+    }
+}
+
+/// A CLI that answers its first `answers` requests, the first only after
+/// `start`, as one still loading from a cold disk does, then nothing until
+/// the transport is closed.
+private final class StartingRPCTransport: RPCTransport, @unchecked Sendable {
+    private let start: Duration
+    private let answers: Int
+    private let lock = NSLock()
+    private var requests: [Int] = []
+    private var answered = 0
+    private var closed = false
+    private let silent = SilentRPCTransport()
+
+    init(start: Duration, answers: Int = .max) {
+        self.start = start
+        self.answers = answers
+    }
+
+    func send(_ data: Data) throws {
+        guard let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let id = message["id"] as? Int else { return }
+        lock.withLock { requests.append(id) }
+    }
+
+    func receive() async throws -> Data {
+        let next: (id: Int, first: Bool)? = lock.withLock {
+            guard answered < answers, !requests.isEmpty else { return nil }
+            answered += 1
+            return (requests.removeFirst(), answered == 1)
+        }
+        guard let next else { return try await silent.receive() }
+        if next.first {
+            let clock = ContinuousClock()
+            let ready = clock.now + start
+            while clock.now < ready {
+                if lock.withLock({ closed }) { throw UsageError.executionFailed("Process closed unexpectedly") }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        return Data(#"{"id":\#(next.id),"result":{"used":40}}"#.utf8)
+    }
+
+    func close() {
+        lock.withLock { closed = true }
+        silent.close()
     }
 }

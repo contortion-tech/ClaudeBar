@@ -128,17 +128,38 @@ struct HTTPFetcher: Fetching {
     }
 }
 
+/// A fact told once while it holds: news when it holds now and didn't when
+/// last asked.
+final class ChangeNote: Sendable {
+    private let held = Mutex(false)
+
+    /// Whether `holds` is news, remembering it for the next ask.
+    func isNews(_ holds: Bool) -> Bool {
+        held.withLock { held in
+            defer { held = holds }
+            return holds && !held
+        }
+    }
+}
+
 /// `jsonRpc` — starts the CLI, sends the handshake, then the call, and
 /// answers with the call's whole message as the response body.
 struct JSONRPCFetcher: Fetching {
     let call: JSONRPCCall
     let processes: Processes
     let directory: @Sendable () -> URL?
+    var log = AppLog.probes
+    /// Whether the CLI was missing when last asked.
+    let missing = ChangeNote()
 
+    /// Whether the CLI is installed. Asked at every refresh, and a CLI that
+    /// isn't installed is no failure: the login is skipped or another data
+    /// source answers. Said once, and again only after the CLI was found and
+    /// went missing (#693).
     func isReady() -> Bool {
-        if processes.program(named: call.cli) != nil { return true }
-        AppLog.probes.error("'\(call.cli)' not found in PATH")
-        return false
+        let found = processes.program(named: call.cli) != nil
+        if missing.isNews(!found) { log.info("'\(call.cli)' not found in PATH") }
+        return found
     }
 
     func fetch(with credential: Credential?) async throws -> Response {
@@ -149,15 +170,17 @@ struct JSONRPCFetcher: Fetching {
         // A CLI can stall without answering or exiting (#517). A read from
         // its pipe ignores cancellation, so at the deadline, or when the
         // refresh is cancelled, the transport is closed: that stops the CLI
-        // and ends the read.
-        let deadline = Deadline()
+        // and ends the read. The deadline counts from when the CLI is first
+        // asked: until the exchange runs, the app's threads may be busy with
+        // other work, and the time they take isn't the CLI's (#698).
+        let allowance = FetchContext.startAllowance
+        let deadline = RPCDeadline(timeout: call.timeout, startAllowance: allowance)
         do {
             return try await withTaskCancellationHandler {
                 try await withThrowingTaskGroup(of: Response?.self) { group in
-                    group.addTask { try await exchange(over: transport) }
+                    group.addTask { try await exchange(over: transport, deadline: deadline) }
                     group.addTask {
-                        try await Task.sleep(for: .seconds(call.timeout))
-                        deadline.pass()
+                        try await deadline.wait()
                         transport.close()
                         return nil
                     }
@@ -173,35 +196,85 @@ struct JSONRPCFetcher: Fetching {
                 transport.close()
             }
         } catch where deadline.hasPassed {
-            AppLog.probes.error("\(call.cli) \(call.call) did not answer within \(Int(call.timeout))s")
+            let start = allowance > 0 ? ", \(Int(allowance))s more to start" : ""
+            log.error("\(call.cli) \(call.call) did not answer within \(Int(call.timeout))s\(start)")
             throw UsageError.timeout
         }
     }
 
-    private func exchange(over transport: any RPCTransport) async throws -> Response {
+    private func exchange(over transport: any RPCTransport, deadline: RPCDeadline) async throws -> Response {
         let session = RPCSession(transport: transport, errors: call.errors)
+        deadline.asked()
         for step in call.handshake {
             if let method = step.request {
                 _ = try await session.request(method, params: step.params)
+                deadline.answered()
             } else if let method = step.notify {
                 try session.notify(method, params: step.params)
             }
         }
         var message = try await session.request(call.call, params: call.params)
+        deadline.answered()
         for followUp in call.then {
             message[followUp.as] = try await session.request(followUp.request, params: followUp.params)
         }
-        AppLog.probes.debug("\(call.cli) \(call.call) answered")
+        log.debug("\(call.cli) \(call.call) answered")
         return Response(body: try JSONSerialization.data(withJSONObject: message))
     }
 }
 
-/// Whether a JSON-RPC exchange ran out of time — set by its timer, read by
-/// the fetch.
-private final class Deadline: Sendable {
+/// When a JSON-RPC exchange runs out of time, and whether it has: `timeout`
+/// after the CLI first answers a request, or, while it hasn't, `timeout`
+/// plus the time it may take to start (`FetchContext.startAllowance`, #685),
+/// from when it was first asked (#698). The exchange says when it asked and
+/// when the CLI answered; its timer waits for the end.
+final class RPCDeadline: Sendable {
+    private let timeout: Duration
+    private let allowance: Duration
+    private let firstAsked = Mutex<ContinuousClock.Instant?>(nil)
+    private let firstAnswer = Mutex<ContinuousClock.Instant?>(nil)
     private let passed = Mutex(false)
 
-    func pass() { passed.withLock { $0 = true } }
+    /// A deadline `timeout` seconds long, with `startAllowance` more while the
+    /// CLI hasn't answered; a negative allowance is none.
+    init(timeout: TimeInterval, startAllowance: TimeInterval) {
+        self.timeout = .seconds(timeout)
+        allowance = .seconds(max(0, startAllowance))
+    }
+
+    /// The CLI is asked a request; the time counts from the first time it was.
+    func asked(at instant: ContinuousClock.Instant = .now) {
+        firstAsked.withLock { $0 = $0 ?? instant }
+    }
+
+    /// The CLI answered a request; the timeout counts from the first time it did.
+    func answered(at instant: ContinuousClock.Instant = .now) {
+        firstAnswer.withLock { $0 = $0 ?? instant }
+    }
+
+    /// When the exchange runs out of time, as things stand; none before the
+    /// CLI is asked anything.
+    var end: ContinuousClock.Instant? {
+        guard let asked = firstAsked.withLock({ $0 }) else { return nil }
+        let latest = asked + timeout + allowance
+        return firstAnswer.withLock { $0 }.map { min(latest, $0 + timeout) } ?? latest
+    }
+
+    /// Returns when the deadline passes.
+    func wait() async throws {
+        while true {
+            let now = ContinuousClock.now
+            let end = self.end
+            if let end, now >= end { break }
+            // Being asked sets the end and a first answer brings it closer,
+            // so look again at least every 100 ms.
+            let look = now + .milliseconds(100)
+            try await Task.sleep(until: end.map { min($0, look) } ?? look, clock: .continuous)
+        }
+        passed.withLock { $0 = true }
+    }
+
+    /// Whether `wait()` found the deadline passed.
     var hasPassed: Bool { passed.withLock { $0 } }
 }
 

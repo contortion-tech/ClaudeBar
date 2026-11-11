@@ -16,12 +16,31 @@
   "settings": [
     { "id": "home", "default": "~", "label": "Signed-in Home Folder", "scope": "account", "kind": { "path": { "mustExist": true } } }
   ],
-  "defaultDataSource": "cli",
+  "defaultDataSource": "rpc",
   "dataSources": [
+    {
+      "kind": "rpc",
+      "label": "RPC",
+      "summary": "Asks the v3 engine for usage over `kiro-cli acp` (JSON-RPC)",
+      "fetch": {
+        "jsonRpc": {
+          "cli": "kiro-cli",
+          "args": ["acp", "--agent-engine", "v3"],
+          "handshake": [
+            { "request": "initialize", "params": { "protocolVersion": 1, "clientCapabilities": {}, "clientInfo": { "name": "claudebar", "version": "1.0.0" } } }
+          ],
+          "call": "_kiro/account/getUsage",
+          "timeout": 45
+        }
+      },
+      "mapping": { "script": { "file": "kiro-usage.js" } },
+      "fallback": { "to": "cli", "sameLogin": true },
+      "errors": { "cli.missing": { "cliNotFound": "kiro-cli" } }
+    },
     {
       "kind": "cli",
       "label": "CLI",
-      "summary": "Asks `kiro-cli` for /usage",
+      "summary": "Asks `kiro-cli` for /usage (kiro-cli before the v3 engine)",
       "fetch": { "command": { "cli": "kiro-cli", "input": "/usage\n/quit\n", "timeout": 30 } },
       "mapping": { "script": { "file": "kiro-usage.js" } },
       "errors": { "cli.missing": { "cliNotFound": "kiro-cli" } }

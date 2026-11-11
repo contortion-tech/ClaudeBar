@@ -17,11 +17,14 @@
     {
       "kind": "local",
       "label": "Windsurf app",
-      "summary": "Reads the plan Windsurf saves on this computer, read-only. It updates while Windsurf runs.",
+      "summary": "Reads the plan Devin Desktop (formerly Windsurf) saves on this computer, read-only. It updates while the app runs.",
       "fetch": {
         "sqlite": {
-          "path": "{{platform.appData}}/Windsurf/User/globalStorage/state.vscdb",
-          "query": "SELECT value FROM ItemTable WHERE key = 'windsurf.settings.cachedPlanInfo' LIMIT 1"
+          "path": [
+            "{{platform.appData}}/Devin/User/globalStorage/state.vscdb",
+            "{{platform.appData}}/Windsurf/User/globalStorage/state.vscdb"
+          ],
+          "query": "SELECT key, value FROM ItemTable WHERE key LIKE 'windsurf.reactSettings.cachedPlanInfoData%' OR key = 'windsurf.settings.cachedPlanInfo'"
         }
       },
       "mapping": { "script": { "file": "windsurf-plan.js" } }

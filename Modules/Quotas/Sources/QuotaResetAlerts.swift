@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// One reset alert a destination hears (MJ-103): a login's quota window is
 /// about to turn, or just turned. Dedup is the decider's job — a destination
@@ -68,6 +69,7 @@ public protocol QuotaResetAnnouncing: Sendable {
 /// fixed daily reset when one is declared — the estate's ZCode 300M GLM
 /// quota refreshes at 16:00 Europe/Oslo every day.
 @MainActor
+@Observable
 public final class QuotaResetAlertScheduler {
     /// A provider whose windows turn at a fixed wall-clock time every day.
     public struct FixedDailyReset: Sendable, Equatable {

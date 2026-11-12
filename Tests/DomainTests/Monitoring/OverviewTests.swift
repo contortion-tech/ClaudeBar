@@ -252,6 +252,12 @@ struct PopoverPageTests {
     }
 
     @Test
+    func `should always show Home however the lineup or the board is set`() {
+        #expect(PopoverPage.home.shown(allOffered: false, leaderboardOn: false) == .home)
+        #expect(PopoverPage.home.shown(allOffered: true, leaderboardOn: true) == .home)
+    }
+
+    @Test
     func `should open on All every time when the person chose All`() {
         #expect(PopoverOpensOn.all.page(onOpening: .provider) == .all)
         #expect(PopoverOpensOn.all.page(onOpening: .leaderboard) == .all)

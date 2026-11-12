@@ -52,8 +52,9 @@ struct MenuContentView: View {
     @State private var pillsViewportWidth: CGFloat = 0
     /// Logins hidden by the account chips — the page's filter, never a pause.
     @State private var hiddenAccountIds: Set<String> = []
-    /// The page under the pills: All, the Leaderboard, or the selected provider.
-    @State private var page: PopoverPage = .provider
+    /// The page under the pills: Home (the landing), All, the Leaderboard,
+    /// or the selected provider.
+    @State private var page: PopoverPage = .home
 
     /// Every provider in the lineup as a card, for the All page.
     private var overview: Overview { Overview(monitor) }
@@ -66,6 +67,7 @@ struct MenuContentView: View {
 
     private var showsAll: Bool { shownPage == .all }
     private var showsLeaderboard: Bool { shownPage == .leaderboard }
+    private var showsHome: Bool { shownPage == .home }
 
     /// The currently selected provider ID (from monitor, which is @Observable)
     private var selectedProviderId: String {
@@ -139,7 +141,7 @@ struct MenuContentView: View {
                 // or the popover reopens, so a newly selected provider and
                 // every open start at the top instead of inheriting the
                 // previous scroll offset.
-                .id("\(showsAll ? "all" : showsLeaderboard ? "leaderboard" : monitor.selectedProviderId)-\(openCount)")
+                .id("\(showsHome ? "home" : showsAll ? "all" : showsLeaderboard ? "leaderboard" : monitor.selectedProviderId)-\(openCount)")
 
                 // Bottom Action Bar
                 actionBar
@@ -264,7 +266,7 @@ struct MenuContentView: View {
     private var contentMaxHeight: CGFloat {
         PopoverContentHeight.maxHeight(
             visibleScreenHeight: NSScreen.main?.visibleFrame.height ?? 800,
-            overviewMode: showsAll,
+            overviewMode: showsAll || showsHome,
             sessionCardHeight: sessionCardHeight
         )
     }
@@ -415,13 +417,13 @@ struct MenuContentView: View {
     }
 
     /// The soonest window of the selected login — every login on the All
-    /// page — ticking with the popover's frame clock.
+    /// page and the Home landing — ticking with the popover's frame clock.
     @ViewBuilder
     private var resetCountdownText: some View {
         WindowFrameTicker(interval: 30) { now in
             if let line = Self.resetLine(
                 countdowns: quotaResetScheduler.countdowns,
-                providerId: showsAll ? nil : selectedProviderId,
+                providerId: showsAll || showsHome ? nil : selectedProviderId,
                 now: now
             ) {
                 HStack(spacing: 4) {
@@ -461,6 +463,10 @@ struct MenuContentView: View {
             return ScoreLine(providerName: "All", status: statusText,
                              quotas: overview.tightest.map { [$0] } ?? [], tab: 0)
         }
+        if showsHome {
+            return ScoreLine(providerName: "Home", status: statusText,
+                             quotas: overview.tightest.map { [$0] } ?? [], tab: 0)
+        }
         let index = tabs.firstIndex { $0.contains(selectedProviderId) } ?? 0
         return ScoreLine(
             providerName: tabs.indices.contains(index) ? settings.shown(tabs[index].name) : "ClaudeBar",
@@ -489,6 +495,8 @@ struct MenuContentView: View {
                 await monitor.refreshAll()
                 await readUsage()
             }
+        } else if showsHome {
+            Task { await monitor.refreshAll() }
         } else {
             Task { await refreshPage() }
         }
@@ -571,7 +579,9 @@ struct MenuContentView: View {
     /// What the header pill says — the monitor's word for the selected tab.
     /// A provider that failed to probe reads as "UNAVAILABLE" rather than
     /// borrowing a green "HEALTHY" it has no data for (#259).
-    private var selectedProviderBadge: ProviderBadgeState { showsAll ? overview.badge : monitor.selectedBadge }
+    private var selectedProviderBadge: ProviderBadgeState {
+        showsAll || showsHome ? overview.badge : monitor.selectedBadge
+    }
 
     private var statusBadge: some View {
         let statusColor = selectedProviderBadge.badgeColor(theme)
@@ -665,8 +675,11 @@ struct MenuContentView: View {
                 // Leaderboard leads the row, but the popover still opens on
                 // the first provider: it shows only once it's picked.
                 // Gone while the Leaderboard is turned off.
-                // All leads, the Leaderboard follows, then a divider: the pages
-                // about every provider, then a pill per provider.
+                // Home leads, All follows, the Leaderboard next, then a
+                // divider: the pages about every provider, then a pill per
+                // provider.
+                HomePill(isSelected: showsHome) { page = .home }
+                    .help("Home")
                 if overview.isOffered {
                     AllProvidersPill(isSelected: showsAll) { page = .all }
                         .help("All providers (⌘0)")
@@ -777,6 +790,20 @@ struct MenuContentView: View {
         if settings.isShown(.weeklyRecap) { await recaps.readIfStale() }
     }
 
+    /// The Home landing (HOME_PAGE_CONTRACT v1): what the panel contains,
+    /// where to find it, what it can do, what's next. Opening it fetches
+    /// nothing — opening the popover is not intent (#216) — so its chips
+    /// read what the monitor already holds; Refresh from there is the ask.
+    private var homePage: some View {
+        HomeView(
+            monitor: monitor,
+            leaderboard: leaderboard,
+            goAll: { page = .all },
+            goLeaderboard: { page = .leaderboard },
+            refreshAllNow: { refreshNow() }
+        )
+    }
+
     /// A tap on a card or a row opens the provider on its first login.
     private func openCard(_ card: OverviewCard) {
         if let first = card.firstLoginId { selectedProviderId = first }
@@ -794,6 +821,10 @@ struct MenuContentView: View {
             LeaderboardPopoverView(leaderboard: leaderboard, monitor: monitor)
         } else if showsAll {
             allPage
+                .opacity(animateIn ? 1 : 0)
+                .animation(.easeOut(duration: 0.5).delay(0.2), value: animateIn)
+        } else if showsHome {
+            homePage
                 .opacity(animateIn ? 1 : 0)
                 .animation(.easeOut(duration: 0.5).delay(0.2), value: animateIn)
         } else if let tab = monitor.selectedTab, let since = restWhenEmpty.state(of: tab.provider)?.restingSince {
@@ -1766,6 +1797,17 @@ struct AllProvidersPill: View {
     var body: some View {
         ProviderPill(providerId: "all", providerName: "All", isSelected: isSelected, hasData: true,
                      symbol: "square.grid.2x2.fill", action: action)
+    }
+}
+
+/// The pill that opens the Home landing, styled as a provider's.
+struct HomePill: View {
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        ProviderPill(providerId: "home", providerName: "Home", isSelected: isSelected, hasData: true,
+                     symbol: "house.fill", action: action)
     }
 }
 
